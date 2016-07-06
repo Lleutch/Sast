@@ -18,22 +18,22 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
     inherit TypeProviderForNamespaces ()
    
     let tmpAsm = Assembly.LoadFrom(config.RuntimeAssembly)
-    
-    let providedType = TypeGeneration.createProvidedType tmpAsm "TypeProvider"
 
     let createType (name:string) (parameters:obj[]) =
-        match parameters with
-            |[||] -> name
-                        |> TypeGeneration.createProvidedType tmpAsm
-                        |> TypeGeneration.addMember (TypeGeneration.createMethodType "You" [])
-                        |> TypeGeneration.addMember (TypeGeneration.createProvidedIncludedType "NestedType" |> (TypeGeneration.createMethodType "NestedMethod" [] |> TypeGeneration.addMember ))
-                        |> TypeGeneration.addTypeToProvidedType
-            | _ -> failwith "Shouldn't be any parameters"
+        //match parameters with
+            //|[||] -> name
+          name
+            |> TypeGeneration.createProvidedType tmpAsm
+            |> TypeGeneration.addCstor (TypeGeneration.createCstor [])
+            |> TypeGeneration.addProvidedTypeToAssembly
+            //| _ -> failwith "Shouldn't be any parameters"
 
     let parameters = []
-
+    let providedType = TypeGeneration.createProvidedType tmpAsm "TypeProvider"
+    
     do 
+        this.AddNamespace(ns, [TypeGeneration.addProvidedTypeToAssembly providedType] )
+
         providedType.DefineStaticParameters(parameters,createType)
-        this.AddNamespace(ns, [TypeGeneration.addTypeToProvidedType providedType] )
 [<assembly:TypeProviderAssembly>]
     do()

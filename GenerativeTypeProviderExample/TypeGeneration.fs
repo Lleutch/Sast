@@ -23,14 +23,21 @@ let internal createProvidedIncludedType name =
 let internal createMethodType name param=
     ProvidedMethod( name, param, baseType, InvokeCode = (fun args -> <@@ "Hello" + name @@> ))
 
-let internal addTypeToProvidedType (providedType:ProvidedTypeDefinition)=
+let internal createCstor param = 
+    ProvidedConstructor( parameters = param, InvokeCode = fun args -> <@@ obj() @@>)
+
+let internal addProvidedTypeToAssembly (providedType:ProvidedTypeDefinition)=
     asm.AddTypes([providedType])
     providedType
 
-let addMember memberToAdd (providedType:ProvidedTypeDefinition) =
+let internal addMember memberToAdd (providedType:ProvidedTypeDefinition) =
     providedType.AddMember(memberToAdd)
     providedType
 
 let internal addMethod methodType (providedType:ProvidedTypeDefinition) = 
     providedType.AddMember methodType
     providedType    
+
+let internal addCstor cstorToAdd (providedType:ProvidedTypeDefinition) =
+    providedType.AddMember(cstorToAdd)
+    providedType
