@@ -27,7 +27,7 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
                             let tupleRole = makeRoleTypes protocol
                             let list1 = snd(tupleLabel)
                             let list2 = snd(tupleRole)
-                            //addProperties listTypes listTypes (Set.toList stateSet) (fst tupleLabel) (fst tupleRole) protocol
+                            addProperties listTypes listTypes (Set.toList stateSet) (fst tupleLabel) (fst tupleRole) protocol
         
                             let ctorExpr = listTypes.Head.GetConstructors().[0]                                                               
                             let expression = Expr.NewObject(ctorExpr, [])
@@ -40,7 +40,7 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
                                     |> addIncludedTypeToProvidedType list2
                                     |> addIncludedTypeToProvidedType list1
                                     |> addIncludedTypeToProvidedType listTypes
-                                    |> addProvidedTypeToAssembly
+                                    //|> addProvidedTypeToAssembly
             | _ -> failwith "un truc pas cool la"
                 //|> addMembers list2
                 //|> addMembers list1
@@ -83,12 +83,11 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
           *)
 
     let providedType = TypeGeneration.createProvidedType tmpAsm "TypeProvider"
-    let parameters = [ProvidedStaticParameter("Protocol",typeof<string>);
-                      ProvidedStaticParameter("UselessParam",typeof<string>)]
+    let parameters = [ProvidedStaticParameter("Protocol",typeof<string>)]
 
     do 
         providedType.DefineStaticParameters(parameters,createType)
-        this.AddNamespace(ns, [TypeGeneration.addProvidedTypeToAssembly providedType])
+        this.AddNamespace(ns, [providedType])//[TypeGeneration.addProvidedTypeToAssembly providedType])
 
 [<assembly:TypeProviderAssembly>]
     do()

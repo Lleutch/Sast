@@ -19,7 +19,7 @@ type ScribbleProtocole = FSharp.Data.JsonProvider<""" [ { "currentState":1 , "lo
 (******************* TYPE PROVIDER'S ASSEMBLY + NAMESPACE + BASETYPE *******************)
 
 let internal ns = "GenerativeTypeProviderExample.Provided"
-let asm = ProvidedAssembly(Path.ChangeExtension(Path.GetTempFileName(), ".dll"))
+//let asm = ProvidedAssembly(Path.ChangeExtension(Path.GetTempFileName(), ".dll"))
 let baseType = typeof<obj>
 
 
@@ -27,13 +27,13 @@ let baseType = typeof<obj>
 
 // CREATING TYPES, NESTED TYPES, METHODS, PROPERTIES, CONSTRUCTORS
 let internal createProvidedType assembly name = 
-    ProvidedTypeDefinition(assembly, ns, name, Some baseType, IsErased=false)
+    ProvidedTypeDefinition(assembly, ns, name, Some baseType)//, IsErased=false)
 
 let internal createProvidedIncludedType name = 
-    ProvidedTypeDefinition(name,Some baseType, IsErased=false)
+    ProvidedTypeDefinition(name,Some baseType)//, IsErased=false)
 
 let internal createProvidedIncludedTypeChoice typing name =
-    ProvidedTypeDefinition(name, typing , IsErased=false)
+    ProvidedTypeDefinition(name, typing)// , IsErased=false)
 
 let internal createMethodType name param typing expression =
     ProvidedMethod( name, param, typing, InvokeCode = (fun args -> expression ))
@@ -46,9 +46,9 @@ let internal createCstor param expression =
 
 
 // ADDING TYPES, NESTED TYPES, METHODS, PROPERTIES, CONSTRUCTORS TO THE ASSEMBLY AND AS MEMBERS OF THE TYPE PROVIDER
-let internal addProvidedTypeToAssembly (providedType:ProvidedTypeDefinition)=
-    asm.AddTypes([providedType])
-    providedType
+//let internal addProvidedTypeToAssembly (providedType:ProvidedTypeDefinition)=
+//    asm.AddTypes([providedType])
+//    providedType
 
 let internal addIncludedTypeToProvidedType nestedTypeToAdd (providedType:ProvidedTypeDefinition) =
     providedType.AddMembers(nestedTypeToAdd)
@@ -189,7 +189,7 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
                                     let c = nextType.GetConstructors().[0]
                                     let expression = Expr.NewObject(c, [])  
                                     let name = fsmInstance.[aChoice].Label.Replace("(","").Replace(")","") 
-                                    let t = name |> createProvidedIncludedTypeChoice (Some typeof<int>)
+                                    let t = name |> createProvidedIncludedTypeChoice None
                                                  |> addCstor (<@@ () @@> |> createCstor [])
                                                  //|> addMethod (createMethodType "next" [] nextType expression)
                                                  
@@ -200,6 +200,7 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
                                     //t.AddMember(myMethod) 
                                    // t.SetBaseTypeDelayed(fun() -> choiceType.DeclaringType)
                                    // t.SetBaseType(typeof<Test>)
+                                    t.SetBaseTypeDelayed( fun() -> choiceType.DeclaringType.GetNestedType("LabelChoice"+ string event.CurrentState))                                   
                                     mapping <- mapping.Add(fsmInstance.[aChoice].Label,t)
                                     listeLabelSeen <- fsmInstance.[aChoice].Label::listeLabelSeen
                                     listeType <- t::listeType     
@@ -208,7 +209,7 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
                                     let c = nextType.GetConstructors().[0]
                                     let expression = Expr.NewObject(c, [])  
                                     let name = fsmInstance.[hd].Label.Replace("(","").Replace(")","") 
-                                    let t = name |> createProvidedIncludedTypeChoice (Some typeof<int>)
+                                    let t = name |> createProvidedIncludedTypeChoice None
                                                  |> addCstor (<@@ () @@> |> createCstor [])
                                                  //|> addMethod (createMethodType "next" [] nextType expression)
 
@@ -219,7 +220,7 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
                                     //t.AddMember(myMethod) 
                                     
                                     //t.SetBaseType(typeof<Test>)
-                                    //t.SetBaseTypeDelayed( fun() -> choiceType.DeclaringType.GetNestedType("LabelChoice"+ string event.CurrentState))
+                                    t.SetBaseTypeDelayed( fun() -> choiceType.DeclaringType.GetNestedType("LabelChoice"+ string event.CurrentState))
                                     mapping <- mapping.Add(fsmInstance.[hd].Label,t)
                                     listeLabelSeen <- fsmInstance.[hd].Label::listeLabelSeen
                                     listeType <- t::listeType  
@@ -228,7 +229,7 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
         else if not(alreadySeen listeLabelSeen event.Label) then
             let name = event.Label.Replace("(","").Replace(")","") 
             let t = name |> createProvidedIncludedType
-                                                 |> addCstor (<@@ () @@> |> createCstor [])
+                         |> addCstor (<@@ () @@> |> createCstor [])
             
             //let t = ProvidedTypeDefinition(name,Some typeof<obj>, IsErased = false)
             //let ctor = ProvidedConstructor([], InvokeCode = fun args -> <@@ "We'll see later" :> obj @@>) // add argument later
