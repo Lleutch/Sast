@@ -9,6 +9,8 @@ open System.Reflection // necessary if we want to use the f# assembly
 open System.IO
 open System
 
+type Test = class end
+
 (******************* DOMAIN MODELLING TYPES *******************)
 
 type ScribbleProtocole = FSharp.Data.JsonProvider<""" [ { "currentState":1 , "localRole":"Me", "partner":"You" , "label":"hello()" , "type":"send" , "nextState":2  } ] """>
@@ -30,6 +32,9 @@ let internal createProvidedType assembly name =
 let internal createProvidedIncludedType name = 
     ProvidedTypeDefinition(name,Some baseType, IsErased=false)
 
+let internal createProvidedIncludedTypeChoice typing name =
+    ProvidedTypeDefinition(name, typing , IsErased=false)
+
 let internal createMethodType name param typing expression =
     ProvidedMethod( name, param, typing, InvokeCode = (fun args -> expression ))
 
@@ -46,7 +51,7 @@ let internal addProvidedTypeToAssembly (providedType:ProvidedTypeDefinition)=
     providedType
 
 let internal addIncludedTypeToProvidedType nestedTypeToAdd (providedType:ProvidedTypeDefinition) =
-    providedType.AddMembers([nestedTypeToAdd])
+    providedType.AddMembers(nestedTypeToAdd)
     providedType
 
 let internal addMethod methodType (providedType:ProvidedTypeDefinition) = 
@@ -59,6 +64,14 @@ let internal addProperty propertyToAdd (providedType:ProvidedTypeDefinition) =
 
 let internal addCstor cstorToAdd (providedType:ProvidedTypeDefinition) =
     providedType.AddMember(cstorToAdd)
+    providedType
+
+let internal addMember (memberInfo:#MemberInfo) (providedType:ProvidedTypeDefinition) = 
+    providedType.AddMember(memberInfo)
+    providedType
+
+let internal addMembers (membersInfo:#MemberInfo list) (providedType:ProvidedTypeDefinition) = 
+    providedType.AddMembers(membersInfo)
     providedType
 
 
@@ -129,7 +142,7 @@ let rec findProvidedType (providedList:ProvidedTypeDefinition list) stateValue =
 let internal makeRoleTypes (fsmInstance:ScribbleProtocole.Root []) = 
     let mutable liste = [fsmInstance.[0].LocalRole]
     let mutable listeType = []
-    let ctor = <@@ () @@> |> createCstor [ProvidedParameter("ToChangeIfNeeded",typeof<int>)]
+    let ctor = <@@ () @@> |> createCstor []
     let t = fsmInstance.[0].LocalRole 
                                         |> createProvidedIncludedType 
                                         |> addCstor ctor
@@ -158,7 +171,7 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
             
             let choiceType = ("LabelChoice" + string event.CurrentState) |> createProvidedIncludedType
                                                                          |> addCstor ( <@@ () @@> |> createCstor [])
-                                                                         |> addMethod ( <@@ () @@> |> createMethodType ("labelChoice" + string event.CurrentState) [] typeof<unit>)   
+                                                                         //|> addMethod ( <@@ () @@> |> createMethodType ("labelChoice" + string event.CurrentState) [] typeof<unit>)   
             //let choiceType = ProvidedTypeDefinition("LabelChoice"+ string event.CurrentState, Some typeof<obj>, IsErased = false)
             //let ctor = ProvidedConstructor([], InvokeCode = fun args -> <@@ "We'll see later" :> obj @@>) // add argument later
             //choiceType.AddMember(ctor)
@@ -166,7 +179,7 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
             //choiceType.AddMember(myMethod)
             
             mapping <- mapping.Add("LabelChoice"+ string event.CurrentState,choiceType)
-            listeType <- choiceType::listeType  
+            listeType <- choiceType::listeType 
             let listIndexChoice = findSameCurrent event.CurrentState fsmInstance
             let rec aux (liste:int list) =
                 match liste with
@@ -176,16 +189,17 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
                                     let c = nextType.GetConstructors().[0]
                                     let expression = Expr.NewObject(c, [])  
                                     let name = fsmInstance.[aChoice].Label.Replace("(","").Replace(")","") 
-                                    let t = name |> createProvidedIncludedType
+                                    let t = name |> createProvidedIncludedTypeChoice (Some typeof<int>)
                                                  |> addCstor (<@@ () @@> |> createCstor [])
-                                                 |> addMethod (createMethodType "next" [] nextType expression)
+                                                 //|> addMethod (createMethodType "next" [] nextType expression)
                                                  
                                     //let t = ProvidedTypeDefinition(name, None, IsErased = false)
                                     //let ctor = ProvidedConstructor([], InvokeCode = fun args -> <@@ "We'll see later" :> obj @@>) // add argument later
                                     //t.AddMember(ctor)
                                     //let myMethod = ProvidedMethod("next",[],nextType,InvokeCode = fun args -> expression) in
                                     //t.AddMember(myMethod) 
-                                    t.SetBaseTypeDelayed(fun() -> choiceType.DeclaringType.GetNestedType("LabelChoice"+ string event.CurrentState))
+                                   // t.SetBaseTypeDelayed(fun() -> choiceType.DeclaringType)
+                                   // t.SetBaseType(typeof<Test>)
                                     mapping <- mapping.Add(fsmInstance.[aChoice].Label,t)
                                     listeLabelSeen <- fsmInstance.[aChoice].Label::listeLabelSeen
                                     listeType <- t::listeType     
@@ -194,16 +208,18 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
                                     let c = nextType.GetConstructors().[0]
                                     let expression = Expr.NewObject(c, [])  
                                     let name = fsmInstance.[hd].Label.Replace("(","").Replace(")","") 
-                                    let t = name |> createProvidedIncludedType
+                                    let t = name |> createProvidedIncludedTypeChoice (Some typeof<int>)
                                                  |> addCstor (<@@ () @@> |> createCstor [])
-                                                 |> addMethod (createMethodType "next" [] nextType expression)
+                                                 //|> addMethod (createMethodType "next" [] nextType expression)
 
                                     //let t = ProvidedTypeDefinition(name, None, IsErased = false)
                                     //let ctor = ProvidedConstructor([], InvokeCode = fun args -> <@@ "We'll see later" :> obj @@>) // add argument later
                                     //t.AddMember(ctor)
                                     //let myMethod = ProvidedMethod("next",[],nextType,InvokeCode = fun args -> expression) in
                                     //t.AddMember(myMethod) 
-                                    t.SetBaseTypeDelayed(fun() -> choiceType.DeclaringType.GetNestedType("LabelChoice"+ string event.CurrentState))
+                                    
+                                    //t.SetBaseType(typeof<Test>)
+                                    //t.SetBaseTypeDelayed( fun() -> choiceType.DeclaringType.GetNestedType("LabelChoice"+ string event.CurrentState))
                                     mapping <- mapping.Add(fsmInstance.[hd].Label,t)
                                     listeLabelSeen <- fsmInstance.[hd].Label::listeLabelSeen
                                     listeType <- t::listeType  
