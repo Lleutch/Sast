@@ -1,15 +1,42 @@
 ﻿module GenerativeTypeProviderExample.CommunicationAgents
 
 
+// Outside namespaces and modules
 open System.Net.Sockets
 open System.IO
 open System.Net
+
+// ScribbleProvider specific namespaces and modules
 open GenerativeTypeProviderExample.DomainModel
 
-
+exception TooManyTriesError of string
 
 type AgentSender(ipAddress,port) =
-   
+    
+    // FEATURE to add: 5 Tries of 3 seconds and then double the time at each try following Microsoft Standards.
+    // FEATURE ADDED
+    let connect address p (tcpClient:TcpClient) =
+        let rec aux timeout count =
+            let tries = 5
+            try
+                match count with
+                    |n when n<tries ->  tcpClient.Connect(IPAddress.Parse(address),p)
+                                        if not(tcpClient.Connected) then
+                                            async{
+                                                do! Async.Sleep(timeout) // Probably better to use return! instead ATTENTIONNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN
+                                            } |> ignore                                            
+                                            aux (timeout*2) (count+1)
+                    |_ -> tcpClient.Connect(IPAddress.Parse(address),p)
+                          if not(tcpClient.Connected) then
+                              raise (TooManyTriesError("You have tried too many times to connect, the partner is not ready to connect with you"))
+            with
+                | :? System.ArgumentException as ex -> printfn "Argument Exception: %s"  ex.Message
+                | :? System.Net.Sockets.SocketException as ex ->  printfn "Socket Exception error code: %d"  ex.ErrorCode
+                | :? System.ObjectDisposedException as ex -> printfn "Object Disposed Exception: %s"  ex.Message
+                | TooManyTriesError(str) -> printfn "Too Many Tries Error: %s" str
+        
+        in aux 3000 0
+
     let send (stream:NetworkStream) (actor:Agent<Message>) =
         let rec loop () = async {
             let! msg = actor.Receive()
@@ -23,17 +50,17 @@ type AgentSender(ipAddress,port) =
             }
         in loop()
  
-    let mutable agentSender = None
- 
+    let mutable agentSender = None 
+
     member this.SendMessage(message) =
         match (agentSender:Option<Agent<Message>>) with
             |None -> () // Raise an exception Error due to using this method before the Start method in the type provider 
             |Some sending -> sending.Post(Message.SendMessage message)
-    member this.Start() =
-        let tcpClientSend = new TcpClient(ipAddress,port)
+    member this.Start() = // Raise an exception due to trying to connect and parsing the IPAddress
+        let tcpClientSend = new TcpClient()
+        connect ipAddress port tcpClientSend
         let stream = tcpClientSend.GetStream()    
         agentSender <- Some (Agent.Start(send stream))
-        
 
 
 

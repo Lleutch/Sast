@@ -1,26 +1,12 @@
 ﻿module GenerativeTypeProviderExample.TypeGeneration
 
-open FSharp.Core.CompilerServices
-
+// Outside namespaces and modules
 open Microsoft.FSharp.Quotations
 open ProviderImplementation.ProvidedTypes // open the providedtypes.fs file
 open System.Reflection // necessary if we want to use the f# assembly
-   
-open System.IO
-open System
 
-type Test = class end
-
-(******************* DOMAIN MODELLING TYPES *******************)
-
-type ScribbleProtocole = FSharp.Data.JsonProvider<""" [ { "currentState":1 , "localRole":"Me", "partner":"You" , "label":"hello()" , "type":"send" , "nextState":2  } ] """>
-
-
-(******************* TYPE PROVIDER'S ASSEMBLY + NAMESPACE + BASETYPE *******************)
-
-let internal ns = "GenerativeTypeProviderExample.Provided"
-//let asm = ProvidedAssembly(Path.ChangeExtension(Path.GetTempFileName(), ".dll"))
-let baseType = typeof<obj>
+// ScribbleProvider specific namespaces and modules
+open GenerativeTypeProviderExample.DomainModel
 
 
 (******************* TYPE PROVIDER'S HELPERS *******************)
@@ -325,11 +311,12 @@ let rec addProperties (providedListStatic:ProvidedTypeDefinition list) (provided
 let internal contains (aSet:Set<'a>) x = 
     Set.exists ((=) x) aSet
 
-let internal stateSet (fsmInstance:ScribbleProtocole.Root []) = 
+let internal stateSet (fsmInstance:ScribbleProtocole.Root []) =
+    let firstState = fsmInstance.[0].CurrentState
     let mutable setSeen = Set.empty
     let mutable counter = 0
     for event in fsmInstance do
         if (not(contains setSeen event.CurrentState) || not(contains setSeen event.NextState)) then
             setSeen <- setSeen.Add(event.CurrentState)
             setSeen <- setSeen.Add(event.NextState)
-    (setSeen.Count,setSeen)
+    (setSeen.Count,setSeen,firstState)
