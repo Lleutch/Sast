@@ -9,6 +9,7 @@ open System.Reflection // necessary if we want to use the f# assembly
 // ScribbleProvider specific namespaces and modules
 open GenerativeTypeProviderExample.TypeGeneration
 open GenerativeTypeProviderExample.DomainModel
+open GenerativeTypeProviderExample.CommunicationAgents
 
 [<TypeProvider>]
 type GenerativeTypeProvider(config : TypeProviderConfig) as this =
@@ -18,7 +19,7 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
 
     let createType (name:string) (parameters:obj[]) =
         let fsm = parameters.[0]  :?> string  (* this is used if we want to assure that the type of the parameter
-//we are grabbing is a string : DOWNCASTING . Which also means type verification at runtime and not compile time *)
+        we are grabbing is a string : DOWNCASTING . Which also means type verification at runtime and not compile time *)
         let protocol = ScribbleProtocole.Parse(fsm)
         let triple= stateSet protocol
         let n,stateSet,firstState = triple
@@ -26,12 +27,32 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
         let firstStateType = findProvidedType listTypes firstState
         let tupleLabel = makeLabelTypes protocol listTypes
         let tupleRole = makeRoleTypes protocol
+        let listOfRoles = makeRoleList protocol
         let list1 = snd(tupleLabel)
         let list2 = snd(tupleRole)
-        addProperties listTypes listTypes (Set.toList stateSet) (fst tupleLabel) (fst tupleRole) protocol
+
+        let local = parameters.[1]  :?> bool
+        let partnersInfos = parameters.[2]  :?> Map<string,string*int>
+        let localRoleInfos = parameters.[3]  :?> string*int
+
+
+        let agentRouter = createAgentRouter local partnersInfos localRoleInfos listOfRoles
         
-        let ctorExpr = firstStateType.GetConstructors().[0]                                                               
-        let expression = Expr.NewObject(ctorExpr, [])
+        addProperties listTypes listTypes (Set.toList stateSet) (fst tupleLabel) (fst tupleRole) protocol agentRouter
+        (*if local then
+            
+        let agentSender = new AgentSender(string,int)
+        let agentReceiving = new AgentReceiver(string,int)
+        let mutable agentMapSending = Map.empty<string,AgentSender>
+        // Deal with generating these agents!!!!!!!!!!
+        let agentRouter = new AgentRouter(agentMapSending,agentReceiving)
+        // Deal with generating these agents!!!!!!!!!! *)
+
+        let ctor = firstStateType.GetConstructors().[0]                                                               
+        let ctorExpr = Expr.NewObject(ctor, [])
+        let expression = <@@ agentRouter.Start()
+                             %%ctorExpr @@> 
+
         name 
                 |> createProvidedType tmpAsm
                 |> addCstor ( <@@ "hey" + string n @@> |> createCstor [])
@@ -40,9 +61,14 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
                 |> addIncludedTypeToProvidedType list1
                 |> addIncludedTypeToProvidedType listTypes
                 //|> addProvidedTypeToAssembly
-            
+    
+    let basePort = 5000
+             
     let providedType = TypeGeneration.createProvidedType tmpAsm "TypeProvider"
-    let parameters = [ProvidedStaticParameter("Protocol",typeof<string>)]
+    let parameters = [ProvidedStaticParameter("Protocol",typeof<string>);
+                      ProvidedStaticParameter("Local",typeof<bool>,parameterDefaultValue = true);
+                      ProvidedStaticParameter("PartnersInfos",typeof<Map<string,string*int>>,parameterDefaultValue = Map.empty<string,string*int>);
+                      ProvidedStaticParameter("LocalRoleInfos",typeof<string*int>,parameterDefaultValue = ("127.0.0.1",-1));]
 
     do 
         providedType.DefineStaticParameters(parameters,createType)

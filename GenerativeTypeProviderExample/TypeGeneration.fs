@@ -7,6 +7,7 @@ open System.Reflection // necessary if we want to use the f# assembly
 
 // ScribbleProvider specific namespaces and modules
 open GenerativeTypeProviderExample.DomainModel
+open GenerativeTypeProviderExample.CommunicationAgents
 
 
 (******************* TYPE PROVIDER'S HELPERS *******************)
@@ -157,13 +158,6 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
             
             let choiceType = ("LabelChoice" + string event.CurrentState) |> createProvidedIncludedType
                                                                          |> addCstor ( <@@ () @@> |> createCstor [])
-                                                                         //|> addMethod ( <@@ () @@> |> createMethodType ("labelChoice" + string event.CurrentState) [] typeof<unit>)   
-            //let choiceType = ProvidedTypeDefinition("LabelChoice"+ string event.CurrentState, Some typeof<obj>, IsErased = false)
-            //let ctor = ProvidedConstructor([], InvokeCode = fun args -> <@@ "We'll see later" :> obj @@>) // add argument later
-            //choiceType.AddMember(ctor)
-            //let myMethod = ProvidedMethod("labelChoice" + string event.CurrentState ,[],typeof<unit>,InvokeCode = fun args -> <@@ () @@>) in
-            //choiceType.AddMember(myMethod)
-            
             mapping <- mapping.Add("LabelChoice"+ string event.CurrentState,choiceType)
             listeType <- choiceType::listeType 
             let listIndexChoice = findSameCurrent event.CurrentState fsmInstance
@@ -177,15 +171,6 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
                                     let name = fsmInstance.[aChoice].Label.Replace("(","").Replace(")","") 
                                     let t = name |> createProvidedIncludedTypeChoice None
                                                  |> addCstor (<@@ () @@> |> createCstor [])
-                                                 //|> addMethod (createMethodType "next" [] nextType expression)
-                                                 
-                                    //let t = ProvidedTypeDefinition(name, None, IsErased = false)
-                                    //let ctor = ProvidedConstructor([], InvokeCode = fun args -> <@@ "We'll see later" :> obj @@>) // add argument later
-                                    //t.AddMember(ctor)
-                                    //let myMethod = ProvidedMethod("next",[],nextType,InvokeCode = fun args -> expression) in
-                                    //t.AddMember(myMethod) 
-                                   // t.SetBaseTypeDelayed(fun() -> choiceType.DeclaringType)
-                                   // t.SetBaseType(typeof<Test>)
                                     t.SetBaseTypeDelayed( fun() -> choiceType.DeclaringType.GetNestedType("LabelChoice"+ string event.CurrentState))                                   
                                     mapping <- mapping.Add(fsmInstance.[aChoice].Label,t)
                                     listeLabelSeen <- fsmInstance.[aChoice].Label::listeLabelSeen
@@ -197,15 +182,6 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
                                     let name = fsmInstance.[hd].Label.Replace("(","").Replace(")","") 
                                     let t = name |> createProvidedIncludedTypeChoice None
                                                  |> addCstor (<@@ () @@> |> createCstor [])
-                                                 //|> addMethod (createMethodType "next" [] nextType expression)
-
-                                    //let t = ProvidedTypeDefinition(name, None, IsErased = false)
-                                    //let ctor = ProvidedConstructor([], InvokeCode = fun args -> <@@ "We'll see later" :> obj @@>) // add argument later
-                                    //t.AddMember(ctor)
-                                    //let myMethod = ProvidedMethod("next",[],nextType,InvokeCode = fun args -> expression) in
-                                    //t.AddMember(myMethod) 
-                                    
-                                    //t.SetBaseType(typeof<Test>)
                                     t.SetBaseTypeDelayed( fun() -> choiceType.DeclaringType.GetNestedType("LabelChoice"+ string event.CurrentState))
                                     mapping <- mapping.Add(fsmInstance.[hd].Label,t)
                                     listeLabelSeen <- fsmInstance.[hd].Label::listeLabelSeen
@@ -216,10 +192,6 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
             let name = event.Label.Replace("(","").Replace(")","") 
             let t = name |> createProvidedIncludedType
                          |> addCstor (<@@ () @@> |> createCstor [])
-            
-            //let t = ProvidedTypeDefinition(name,Some typeof<obj>, IsErased = false)
-            //let ctor = ProvidedConstructor([], InvokeCode = fun args -> <@@ "We'll see later" :> obj @@>) // add argument later
-            //t.AddMember(ctor)
             mapping <- mapping.Add(event.Label,t)
             listeLabelSeen <- event.Label::listeLabelSeen
             listeType <- t::listeType
@@ -229,45 +201,54 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
 let internal makeStateTypeBase (n:int) (s:string) = 
     (s + string n) |> createProvidedIncludedType
                    |> addCstor (<@@ () @@> |> createCstor [])
-    //let t = ProvidedTypeDefinition(s + string n,Some typeof<obj>, IsErased = false)
-    //let ctor = ProvidedConstructor([], InvokeCode = fun args -> <@@ "MakeStateType" :> obj @@>)
-    //t.AddMember(ctor)
-    //t
 
 let internal makeStateType (n:int) = makeStateTypeBase n "State"
 
-let rec goingThrough (methodName:string) (providedList:ProvidedTypeDefinition list) (aType:ProvidedTypeDefinition) (indexList:int list) (mLabel:Map<string,ProvidedTypeDefinition>) (mRole:Map<string,ProvidedTypeDefinition>) (fsmInstance:ScribbleProtocole.Root []) =
+let internal serialize (nextType:ProvidedTypeDefinition) = // TODO: DEAL WITH SERIALIZATION AND DESERIALIZATION
+    "hey"B
+
+let rec goingThrough (methodName:string) (providedList:ProvidedTypeDefinition list) (aType:ProvidedTypeDefinition) (indexList:int list) 
+                     (mLabel:Map<string,ProvidedTypeDefinition>) (mRole:Map<string,ProvidedTypeDefinition>) (fsmInstance:ScribbleProtocole.Root []) (agentRouter:AgentRouter)=
         match indexList with
         |[] -> // Last state: no next state possible
                 aType |> addMethod (<@@ printfn "finish" @@> |> createMethodType methodName [] typeof<unit> ) |> ignore
-                //let myMethod = ProvidedMethod(methodName,[],typeof<unit>,InvokeCode = fun args -> <@@ printfn "finish" @@>) in
-                //aType.AddMember(myMethod)
-                //printfn " There is a mistake, no index? should never happen, weird issue!!! "
         |[b] -> let nextType = findProvidedType providedList fsmInstance.[b].NextState
                 let c = nextType.GetConstructors().[0]
-                let expression = Expr.NewObject(c, [])
+                let exprState = Expr.NewObject(c, [])
+                let expression =
+                    match methodName with
+                        |"send" ->  <@@ agentRouter.SendMessage((serialize(nextType),fsmInstance.[b].Partner)) 
+                                        %%exprState @@>
+                        |"receive" -> <@@ let received = agentRouter.ReceiveMessage((serialize(nextType),fsmInstance.[b].Partner))
+                                          //let expected = deserialize(nextType)
+                                          //raise(Error) 
+                                          %%exprState @@>
+                        |_ -> <@@ printfn "Error" @@>
                 aType 
                     |> addMethod ( expression |> createMethodType methodName [ProvidedParameter("Label",mLabel.[fsmInstance.[b].Label]);ProvidedParameter("Role",mRole.[fsmInstance.[b].Partner])] nextType)
                     |> ignore
-                //let myMethod = ProvidedMethod(methodName,[ProvidedParameter("Label",mLabel.[fsmInstance.[b].Label]);ProvidedParameter("Role",mRole.[fsmInstance.[b].Partner])],
-                //                                                        nextType,InvokeCode = fun args -> expression) in
-                //aType.AddMember(myMethod)
         |hd::tl -> let nextType = findProvidedType providedList fsmInstance.[hd].NextState
                    let c = nextType.GetConstructors().[0]
-                   let expression = Expr.NewObject(c, [])
+                   let exprState = Expr.NewObject(c, [])
+                   let expression = 
+                       match methodName with
+                           |"send" ->  <@@ agentRouter.SendMessage((serialize(nextType),fsmInstance.[hd].Partner)) 
+                                           %%exprState @@>
+                           |"receive" -> <@@ let received = agentRouter.ReceiveMessage((serialize(nextType),fsmInstance.[hd].Partner)) 
+                                              //let expected = deserialize(nextType)
+                                              //raise(Error) 
+                                             %%exprState @@>
+                           |_ -> <@@ printfn "Error" @@>
                    aType 
                         |> addMethod ( expression |> createMethodType methodName [ProvidedParameter("Label",mLabel.[fsmInstance.[hd].Label]);ProvidedParameter("Role",mRole.[fsmInstance.[hd].Partner])] nextType)
                         |> ignore                
-                   //let myMethod = ProvidedMethod(methodName,[ProvidedParameter("Label",mLabel.[fsmInstance.[hd].Label]);ProvidedParameter("Role",mRole.[fsmInstance.[hd].Partner])],
-                   //                                                            nextType,InvokeCode = fun args -> expression) in
-                   //aType.AddMember(myMethod)    
-                   goingThrough methodName providedList aType tl mLabel mRole fsmInstance
+                   goingThrough methodName providedList aType tl mLabel mRole fsmInstance agentRouter
 
 
-let rec addProperties (providedListStatic:ProvidedTypeDefinition list) (providedList:ProvidedTypeDefinition list) (stateList: int list) (mLabel:Map<string,ProvidedTypeDefinition>) (mRole:Map<string,ProvidedTypeDefinition>) (fsmInstance:ScribbleProtocole.Root []) =
+let rec addProperties (providedListStatic:ProvidedTypeDefinition list) (providedList:ProvidedTypeDefinition list) (stateList: int list) 
+                      (mLabel:Map<string,ProvidedTypeDefinition>) (mRole:Map<string,ProvidedTypeDefinition>) (fsmInstance:ScribbleProtocole.Root []) (agentRouter:AgentRouter)=
     let currentState = stateList.Head
     let indexOfState = findCurrentIndex currentState fsmInstance
-    //if (indexOfState <> -1) then // J'en ai plus besoin géré par method goingThrough
     let indexList = findSameCurrent currentState fsmInstance 
     let mutable methodName = "finish"
     if indexOfState <> -1 then
@@ -275,37 +256,26 @@ let rec addProperties (providedListStatic:ProvidedTypeDefinition list) (provided
     match providedList with
         |[] -> ()
         |[aType] -> match methodName with
-                        |"send" -> goingThrough methodName providedListStatic aType indexList mLabel mRole fsmInstance
-                        |"receive" -> goingThrough methodName providedListStatic aType indexList mLabel mRole fsmInstance
+                        |"send" -> goingThrough methodName providedListStatic aType indexList mLabel mRole fsmInstance agentRouter
+                        |"receive" -> goingThrough methodName providedListStatic aType indexList mLabel mRole fsmInstance agentRouter
                         |"choice" -> let labelType = mLabel.["LabelChoice"+ string currentState]
                                      let c = labelType.GetConstructors().[0]
                                      let expression = Expr.NewObject(c,[])
                                      aType |> addMethod ( expression |> createMethodType "receive" [] labelType ) |> ignore
-
-                                     //let myMethod = ProvidedMethod("receive",[], labelType,InvokeCode = fun args -> expression )in
-                                     //aType.AddMember(myMethod) 
-                        |"finish" -> goingThrough methodName providedListStatic aType indexList mLabel mRole fsmInstance
+                        |"finish" -> goingThrough methodName providedListStatic aType indexList mLabel mRole fsmInstance agentRouter
                         | _ -> printfn "Not correct"
                     aType |> addProperty (<@@ "essaye Bateau" @@> |> createPropertyType "MyProperty" typeof<string> ) |> ignore
-                    //let myProp = ProvidedProperty("MyProperty", typeof<string>, IsStatic = true,
-                    //                                GetterCode = fun args -> <@@ "essaye Bateau" @@>)
-                    //aType.AddMember(myProp)
         |hd::tl ->  match methodName with
-                        |"send" -> goingThrough methodName providedListStatic hd indexList mLabel mRole fsmInstance
-                        |"receive" -> goingThrough methodName providedListStatic hd indexList mLabel mRole fsmInstance
+                        |"send" -> goingThrough methodName providedListStatic hd indexList mLabel mRole fsmInstance agentRouter
+                        |"receive" -> goingThrough methodName providedListStatic hd indexList mLabel mRole fsmInstance agentRouter
                         |"choice" -> let labelType = mLabel.["LabelChoice"+ string currentState]
                                      let c = labelType.GetConstructors().[0]
                                      let expression = Expr.NewObject(c,[]) 
                                      hd |> addMethod (expression |> createMethodType "receive" [] labelType) |> ignore
-                                     //let myMethod = ProvidedMethod("receive",[], labelType,InvokeCode = fun args -> expression )in
-                                     //hd.AddMember(myMethod)
-                        |"finish" -> goingThrough methodName providedListStatic hd indexList mLabel mRole fsmInstance
+                        |"finish" -> goingThrough methodName providedListStatic hd indexList mLabel mRole fsmInstance agentRouter
                         | _ -> printfn "Not correct"
                     hd |> addProperty (<@@ "Test" @@> |> createPropertyType "MyProperty" typeof<string> ) |> ignore
-                    //let myProp = ProvidedProperty("MyProperty", typeof<string>, IsStatic = true,
-                    //                                GetterCode = fun args -> <@@ "Test" @@>)
-                    //hd.AddMember(myProp)
-                    addProperties providedListStatic tl (stateList.Tail) mLabel mRole fsmInstance      
+                    addProperties providedListStatic tl (stateList.Tail) mLabel mRole fsmInstance agentRouter     
 
 
 let internal contains (aSet:Set<'a>) x = 
@@ -320,3 +290,8 @@ let internal stateSet (fsmInstance:ScribbleProtocole.Root []) =
             setSeen <- setSeen.Add(event.CurrentState)
             setSeen <- setSeen.Add(event.NextState)
     (setSeen.Count,setSeen,firstState)
+
+let internal makeRoleList (fsmInstance:ScribbleProtocole.Root []) =
+    [yield fsmInstance.[0].LocalRole
+     for event in fsmInstance do
+        yield event.Partner]

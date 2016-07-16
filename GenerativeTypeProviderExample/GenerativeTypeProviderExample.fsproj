@@ -53,6 +53,8 @@
     <Compile Include="ProvidedTypes.fsi" />
     <Compile Include="ProvidedTypes.fs" />
     <Compile Include="AssemblyInfo.fs" />
+    <Compile Include="DomainModel.fs" />
+    <Compile Include="CommunicationAgents.fs" />
     <Compile Include="TypeGeneration.fs" />
     <Compile Include="Library1.fs" />
     <None Include="Script.fsx" />
