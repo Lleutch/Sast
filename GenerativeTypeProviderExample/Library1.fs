@@ -11,6 +11,8 @@ open GenerativeTypeProviderExample.TypeGeneration
 open GenerativeTypeProviderExample.DomainModel
 open GenerativeTypeProviderExample.CommunicationAgents
 
+type Hey()= class end
+
 [<TypeProvider>]
 type GenerativeTypeProvider(config : TypeProviderConfig) as this =
     inherit TypeProviderForNamespaces ()
@@ -35,24 +37,15 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
         let partnersInfos = parameters.[2]  :?> Map<string,string*int>
         let localRoleInfos = parameters.[3]  :?> string*int
 
-
-        let agentRouter = createAgentRouter local partnersInfos localRoleInfos listOfRoles
         
-        addProperties listTypes listTypes (Set.toList stateSet) (fst tupleLabel) (fst tupleRole) protocol agentRouter
-        (*if local then
-            
-        let agentSender = new AgentSender(string,int)
-        let agentReceiving = new AgentReceiver(string,int)
-        let mutable agentMapSending = Map.empty<string,AgentSender>
-        // Deal with generating these agents!!!!!!!!!!
-        let agentRouter = new AgentRouter(agentMapSending,agentReceiving)
-        // Deal with generating these agents!!!!!!!!!! *)
+        let agentRouter = createAgentRouter local partnersInfos localRoleInfos listOfRoles protocol.[0].LocalRole
 
         let ctor = firstStateType.GetConstructors().[0]                                                               
         let ctorExpr = Expr.NewObject(ctor, [])
-        let expression = <@@ agentRouter.Start()
-                             %%ctorExpr @@> 
-
+        let exprCtor = ctorExpr
+        let exprStart = <@@ agentRouter.Start() @@>
+        let expression = Expr.Sequential(exprStart,exprCtor)
+        
         name 
                 |> createProvidedType tmpAsm
                 |> addCstor ( <@@ "hey" + string n @@> |> createCstor [])

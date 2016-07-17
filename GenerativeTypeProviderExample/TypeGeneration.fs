@@ -217,12 +217,12 @@ let rec goingThrough (methodName:string) (providedList:ProvidedTypeDefinition li
                 let exprState = Expr.NewObject(c, [])
                 let expression =
                     match methodName with
-                        |"send" ->  <@@ agentRouter.SendMessage((serialize(nextType),fsmInstance.[b].Partner)) 
-                                        %%exprState @@>
-                        |"receive" -> <@@ let received = agentRouter.ReceiveMessage((serialize(nextType),fsmInstance.[b].Partner))
+                        |"send" ->  let exprAction = <@@ agentRouter.SendMessage((serialize(nextType),fsmInstance.[b].Partner)) @@>
+                                    Expr.Sequential(exprAction,exprState)
+                        |"receive" -> let exprAction = <@@ agentRouter.ReceiveMessage((serialize(nextType),fsmInstance.[b].Partner)) @@>
                                           //let expected = deserialize(nextType)
-                                          //raise(Error) 
-                                          %%exprState @@>
+                                          //raise(Error)
+                                      Expr.Sequential(exprAction,exprState)
                         |_ -> <@@ printfn "Error" @@>
                 aType 
                     |> addMethod ( expression |> createMethodType methodName [ProvidedParameter("Label",mLabel.[fsmInstance.[b].Label]);ProvidedParameter("Role",mRole.[fsmInstance.[b].Partner])] nextType)
@@ -232,12 +232,12 @@ let rec goingThrough (methodName:string) (providedList:ProvidedTypeDefinition li
                    let exprState = Expr.NewObject(c, [])
                    let expression = 
                        match methodName with
-                           |"send" ->  <@@ agentRouter.SendMessage((serialize(nextType),fsmInstance.[hd].Partner)) 
-                                           %%exprState @@>
-                           |"receive" -> <@@ let received = agentRouter.ReceiveMessage((serialize(nextType),fsmInstance.[hd].Partner)) 
+                           |"send" -> let exprAction = <@@ agentRouter.SendMessage((serialize(nextType),fsmInstance.[hd].Partner)) @@>
+                                      Expr.Sequential(exprAction,exprState)
+                           |"receive" -> let exprAction = <@@ agentRouter.ReceiveMessage((serialize(nextType),fsmInstance.[hd].Partner)) @@>
                                               //let expected = deserialize(nextType)
                                               //raise(Error) 
-                                             %%exprState @@>
+                                         Expr.Sequential(exprAction,exprState)
                            |_ -> <@@ printfn "Error" @@>
                    aType 
                         |> addMethod ( expression |> createMethodType methodName [ProvidedParameter("Label",mLabel.[fsmInstance.[hd].Label]);ProvidedParameter("Role",mRole.[fsmInstance.[hd].Partner])] nextType)

@@ -190,11 +190,11 @@ let private createMapRolePorts (listOfRoles:string list) =
     in aux Map.empty<string,int> listOfRoles 5000
 
 
-let private createLocalMap (listOfRoles:string list) (localRoleInfos:string*int) (mapRolePorts:Map<string,int>) =
+let private createLocalMap (listOfRoles:string list) (localRoleInfos:string*int) (mapRolePorts:Map<string,int>) (localRole:string)=
     let rec aux list (mapping:Map<string,string*int>) =
         match list with
             |[] -> mapping
-            |hd::tl -> let mapping = if not(fst(localRoleInfos)=hd) then 
+            |hd::tl -> let mapping = if not(localRole=hd) then 
                                         mapping.Add(hd,("127.0.0.1",mapRolePorts.[hd]))
                                      else
                                         mapping
@@ -203,16 +203,16 @@ let private createLocalMap (listOfRoles:string list) (localRoleInfos:string*int)
 
 
 // ADD SECURITY BY ADDING CHECKING ON THE NUMBER OF ROLES + RAISE EXCEPTION IF WHAT'S GIVEN IN PARAMETER IS NOT CORRECT
-let internal createAgentRouter (local:bool) (partnersInfos:Map<string,string*int>) (localRoleInfos:string*int) listOfRoles =
+let internal createAgentRouter (local:bool) (partnersInfos:Map<string,string*int>) (localRoleInfos:string*int) listOfRoles (localRole:string) =
     if local then   
         let mapRolePorts = createMapRolePorts listOfRoles
-        let partnersInfos = if partnersInfos.IsEmpty then 
-                                createLocalMap listOfRoles localRoleInfos mapRolePorts 
-                            else 
-                                partnersInfos
+        let partnersInfos = //if partnersInfos.IsEmpty then 
+                                createLocalMap listOfRoles localRoleInfos mapRolePorts localRole
+                            //else 
+                            //    partnersInfos
         let localRoleInfos = // if (snd(localRoleInfos)<0) then  COMMENTED FOR THE MOMENT BUT HAVE TO FIND A BETTER WAY TO DEAL WITH THIS SITUATION
-                                let role = fst(localRoleInfos) 
-                                (role,mapRolePorts.[role])
+                                let ipAddress= fst(localRoleInfos) 
+                                (ipAddress,mapRolePorts.[localRole])
         let agentSenders = createMapAgentSenders partnersInfos
         let agentReceiver = createAgentReceiver localRoleInfos
         new AgentRouter(agentSenders,agentReceiver)
