@@ -10,6 +10,7 @@ open System.Reflection // necessary if we want to use the f# assembly
 open GenerativeTypeProviderExample.TypeGeneration
 open GenerativeTypeProviderExample.DomainModel
 open GenerativeTypeProviderExample.CommunicationAgents
+open GenerativeTypeProviderExample.Regarder
 
 type Hey()= class end
 
@@ -39,11 +40,14 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
 
         
         let agentRouter = createAgentRouter local partnersInfos localRoleInfos listOfRoles protocol.[0].LocalRole
+        Regarder.ajouter "agent" agentRouter
+
+        addProperties listTypes listTypes (Set.toList stateSet) (fst tupleLabel) (fst tupleRole) protocol
 
         let ctor = firstStateType.GetConstructors().[0]                                                               
         let ctorExpr = Expr.NewObject(ctor, [])
         let exprCtor = ctorExpr
-        let exprStart = <@@ agentRouter.Start() @@>
+        let exprStart = <@@ Regarder.startAgentRouter "agent" @@>
         let expression = Expr.Sequential(exprStart,exprCtor)
         
         name 

@@ -202,21 +202,37 @@ let private createLocalMap (listOfRoles:string list) (localRoleInfos:string*int)
     aux listOfRoles Map.empty<string,string*int>
 
 
+
+exception TcpInfos of string
+
 // ADD SECURITY BY ADDING CHECKING ON THE NUMBER OF ROLES + RAISE EXCEPTION IF WHAT'S GIVEN IN PARAMETER IS NOT CORRECT
 let internal createAgentRouter (local:bool) (partnersInfos:Map<string,string*int>) (localRoleInfos:string*int) listOfRoles (localRole:string) =
     if local then   
         let mapRolePorts = createMapRolePorts listOfRoles
-        let partnersInfos = //if partnersInfos.IsEmpty then 
-                                createLocalMap listOfRoles localRoleInfos mapRolePorts localRole
-                            //else 
-                            //    partnersInfos
-        let localRoleInfos = // if (snd(localRoleInfos)<0) then  COMMENTED FOR THE MOMENT BUT HAVE TO FIND A BETTER WAY TO DEAL WITH THIS SITUATION
-                                let ipAddress= fst(localRoleInfos) 
-                                (ipAddress,mapRolePorts.[localRole])
-        let agentSenders = createMapAgentSenders partnersInfos
-        let agentReceiver = createAgentReceiver localRoleInfos
-        new AgentRouter(agentSenders,agentReceiver)
+        if (partnersInfos.IsEmpty || (snd(localRoleInfos) = -1)) then
+            let partnersInfos = createLocalMap listOfRoles localRoleInfos mapRolePorts localRole
+            let ipAddress= fst(localRoleInfos) 
+            let localRoleInfos = (ipAddress,mapRolePorts.[localRole])
+            
+            let agentSenders = createMapAgentSenders partnersInfos
+            let agentReceiver = createAgentReceiver localRoleInfos
+            new AgentRouter(agentSenders,agentReceiver)
+        else
+            let agentSenders = createMapAgentSenders partnersInfos
+            let agentReceiver = createAgentReceiver localRoleInfos
+            new AgentRouter(agentSenders,agentReceiver)
+                                 
     else // FOR THE MOMENT THIS SUPPOSES NO MISTAKE FROM THE CODER
-        let agentSenders = createMapAgentSenders partnersInfos
-        let agentReceiver = createAgentReceiver localRoleInfos
-        new AgentRouter(agentSenders,agentReceiver)
+        if (partnersInfos.IsEmpty || (snd(localRoleInfos) = -1)) then
+            try
+                raise (TcpInfos("DISTRIBUTED TCP INFOS MISTAKES"))
+            with 
+                | TcpInfos str ->   printfn "Tcp Infos Incorrect: %s" str 
+                                    // THE NEXT 3 lines of code is for type checking to work
+                                    let agentSenders = createMapAgentSenders partnersInfos
+                                    let agentReceiver = createAgentReceiver localRoleInfos  
+                                    new AgentRouter(agentSenders,agentReceiver) 
+        else
+            let agentSenders = createMapAgentSenders partnersInfos
+            let agentReceiver = createAgentReceiver localRoleInfos
+            new AgentRouter(agentSenders,agentReceiver)    

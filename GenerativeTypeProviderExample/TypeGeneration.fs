@@ -208,18 +208,20 @@ let internal serialize (nextType:ProvidedTypeDefinition) = // TODO: DEAL WITH SE
     "hey"B
 
 let rec goingThrough (methodName:string) (providedList:ProvidedTypeDefinition list) (aType:ProvidedTypeDefinition) (indexList:int list) 
-                     (mLabel:Map<string,ProvidedTypeDefinition>) (mRole:Map<string,ProvidedTypeDefinition>) (fsmInstance:ScribbleProtocole.Root []) (agentRouter:AgentRouter)=
+                     (mLabel:Map<string,ProvidedTypeDefinition>) (mRole:Map<string,ProvidedTypeDefinition>) (fsmInstance:ScribbleProtocole.Root []) =
         match indexList with
         |[] -> // Last state: no next state possible
                 aType |> addMethod (<@@ printfn "finish" @@> |> createMethodType methodName [] typeof<unit> ) |> ignore
         |[b] -> let nextType = findProvidedType providedList fsmInstance.[b].NextState
                 let c = nextType.GetConstructors().[0]
                 let exprState = Expr.NewObject(c, [])
+                let message = serialize(nextType)
+                let role = fsmInstance.[b].Partner
                 let expression =
                     match methodName with
-                        |"send" ->  let exprAction = <@@ agentRouter.SendMessage((serialize(nextType),fsmInstance.[b].Partner)) @@>
+                        |"send" ->  let exprAction = <@@ Regarder.sendMessage "agent" message role @@>
                                     Expr.Sequential(exprAction,exprState)
-                        |"receive" -> let exprAction = <@@ agentRouter.ReceiveMessage((serialize(nextType),fsmInstance.[b].Partner)) @@>
+                        |"receive" -> let exprAction = <@@ Regarder.receiveMessage "agent" message role @@>
                                           //let expected = deserialize(nextType)
                                           //raise(Error)
                                       Expr.Sequential(exprAction,exprState)
@@ -230,11 +232,13 @@ let rec goingThrough (methodName:string) (providedList:ProvidedTypeDefinition li
         |hd::tl -> let nextType = findProvidedType providedList fsmInstance.[hd].NextState
                    let c = nextType.GetConstructors().[0]
                    let exprState = Expr.NewObject(c, [])
+                   let message = serialize(nextType)
+                   let role = fsmInstance.[hd].Partner
                    let expression = 
                        match methodName with
-                           |"send" -> let exprAction = <@@ agentRouter.SendMessage((serialize(nextType),fsmInstance.[hd].Partner)) @@>
+                           |"send" -> let exprAction = <@@ Regarder.sendMessage "agent" message role @@>
                                       Expr.Sequential(exprAction,exprState)
-                           |"receive" -> let exprAction = <@@ agentRouter.ReceiveMessage((serialize(nextType),fsmInstance.[hd].Partner)) @@>
+                           |"receive" -> let exprAction = <@@ Regarder.receiveMessage "agent" message role @@>
                                               //let expected = deserialize(nextType)
                                               //raise(Error) 
                                          Expr.Sequential(exprAction,exprState)
@@ -242,11 +246,11 @@ let rec goingThrough (methodName:string) (providedList:ProvidedTypeDefinition li
                    aType 
                         |> addMethod ( expression |> createMethodType methodName [ProvidedParameter("Label",mLabel.[fsmInstance.[hd].Label]);ProvidedParameter("Role",mRole.[fsmInstance.[hd].Partner])] nextType)
                         |> ignore                
-                   goingThrough methodName providedList aType tl mLabel mRole fsmInstance agentRouter
+                   goingThrough methodName providedList aType tl mLabel mRole fsmInstance 
 
 
 let rec addProperties (providedListStatic:ProvidedTypeDefinition list) (providedList:ProvidedTypeDefinition list) (stateList: int list) 
-                      (mLabel:Map<string,ProvidedTypeDefinition>) (mRole:Map<string,ProvidedTypeDefinition>) (fsmInstance:ScribbleProtocole.Root []) (agentRouter:AgentRouter)=
+                      (mLabel:Map<string,ProvidedTypeDefinition>) (mRole:Map<string,ProvidedTypeDefinition>) (fsmInstance:ScribbleProtocole.Root []) =
     let currentState = stateList.Head
     let indexOfState = findCurrentIndex currentState fsmInstance
     let indexList = findSameCurrent currentState fsmInstance 
@@ -256,26 +260,26 @@ let rec addProperties (providedListStatic:ProvidedTypeDefinition list) (provided
     match providedList with
         |[] -> ()
         |[aType] -> match methodName with
-                        |"send" -> goingThrough methodName providedListStatic aType indexList mLabel mRole fsmInstance agentRouter
-                        |"receive" -> goingThrough methodName providedListStatic aType indexList mLabel mRole fsmInstance agentRouter
+                        |"send" -> goingThrough methodName providedListStatic aType indexList mLabel mRole fsmInstance
+                        |"receive" -> goingThrough methodName providedListStatic aType indexList mLabel mRole fsmInstance 
                         |"choice" -> let labelType = mLabel.["LabelChoice"+ string currentState]
                                      let c = labelType.GetConstructors().[0]
                                      let expression = Expr.NewObject(c,[])
                                      aType |> addMethod ( expression |> createMethodType "receive" [] labelType ) |> ignore
-                        |"finish" -> goingThrough methodName providedListStatic aType indexList mLabel mRole fsmInstance agentRouter
+                        |"finish" -> goingThrough methodName providedListStatic aType indexList mLabel mRole fsmInstance 
                         | _ -> printfn "Not correct"
                     aType |> addProperty (<@@ "essaye Bateau" @@> |> createPropertyType "MyProperty" typeof<string> ) |> ignore
         |hd::tl ->  match methodName with
-                        |"send" -> goingThrough methodName providedListStatic hd indexList mLabel mRole fsmInstance agentRouter
-                        |"receive" -> goingThrough methodName providedListStatic hd indexList mLabel mRole fsmInstance agentRouter
+                        |"send" -> goingThrough methodName providedListStatic hd indexList mLabel mRole fsmInstance 
+                        |"receive" -> goingThrough methodName providedListStatic hd indexList mLabel mRole fsmInstance 
                         |"choice" -> let labelType = mLabel.["LabelChoice"+ string currentState]
                                      let c = labelType.GetConstructors().[0]
                                      let expression = Expr.NewObject(c,[]) 
                                      hd |> addMethod (expression |> createMethodType "receive" [] labelType) |> ignore
-                        |"finish" -> goingThrough methodName providedListStatic hd indexList mLabel mRole fsmInstance agentRouter
+                        |"finish" -> goingThrough methodName providedListStatic hd indexList mLabel mRole fsmInstance 
                         | _ -> printfn "Not correct"
                     hd |> addProperty (<@@ "Test" @@> |> createPropertyType "MyProperty" typeof<string> ) |> ignore
-                    addProperties providedListStatic tl (stateList.Tail) mLabel mRole fsmInstance agentRouter     
+                    addProperties providedListStatic tl (stateList.Tail) mLabel mRole fsmInstance 
 
 
 let internal contains (aSet:Set<'a>) x = 
