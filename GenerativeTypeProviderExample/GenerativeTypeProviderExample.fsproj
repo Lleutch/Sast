@@ -25,8 +25,10 @@
     <DocumentationFile>bin\Debug\GenerativeTypeProviderExample.XML</DocumentationFile>
     <StartAction>Program</StartAction>
     <StartProgram>C:\Program Files (x86)\Microsoft Visual Studio 14.0\Common7\IDE\devenv.exe</StartProgram>
-    <StartWorkingDirectory>C:\Users\fahd\Desktop\GTP\GenerativeTypeProviderExample\ConsoleApplication1\</StartWorkingDirectory>
-    <StartArguments>"C:\Users\fahd\Desktop\GTP\GenerativeTypeProviderExample\ConsoleApplication1\ConsoleApplication1.fsproj"</StartArguments>
+    <StartWorkingDirectory>
+    </StartWorkingDirectory>
+    <StartArguments>
+    </StartArguments>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>

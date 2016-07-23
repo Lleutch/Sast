@@ -200,12 +200,15 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
 
 let internal makeStateTypeBase (n:int) (s:string) = 
     (s + string n) |> createProvidedIncludedType
-                   |> addCstor (<@@ () @@> |> createCstor [])
+                   |> addCstor (<@@ s+ string n @@> |> createCstor [])
 
 let internal makeStateType (n:int) = makeStateTypeBase n "State"
 
-let internal serialize (nextType:ProvidedTypeDefinition) = // TODO: DEAL WITH SERIALIZATION AND DESERIALIZATION
-    "hey"B
+let internal serialize (label:string) = // TODO: DEAL WITH SERIALIZATION AND DESERIALIZATION
+    let fin = System.Text.ASCIIEncoding.ASCII.GetString([|byte(0)|])
+    let message = sprintf "%s%s" label fin
+    System.Text.ASCIIEncoding.ASCII.GetBytes(message)
+
 
 let rec goingThrough (methodName:string) (providedList:ProvidedTypeDefinition list) (aType:ProvidedTypeDefinition) (indexList:int list) 
                      (mLabel:Map<string,ProvidedTypeDefinition>) (mRole:Map<string,ProvidedTypeDefinition>) (fsmInstance:ScribbleProtocole.Root []) =
@@ -215,7 +218,8 @@ let rec goingThrough (methodName:string) (providedList:ProvidedTypeDefinition li
         |[b] -> let nextType = findProvidedType providedList fsmInstance.[b].NextState
                 let c = nextType.GetConstructors().[0]
                 let exprState = Expr.NewObject(c, [])
-                let message = serialize(nextType)
+                let label = fsmInstance.[b].Label
+                let message = serialize(label)
                 let role = fsmInstance.[b].Partner
                 let expression =
                     match methodName with
@@ -232,7 +236,8 @@ let rec goingThrough (methodName:string) (providedList:ProvidedTypeDefinition li
         |hd::tl -> let nextType = findProvidedType providedList fsmInstance.[hd].NextState
                    let c = nextType.GetConstructors().[0]
                    let exprState = Expr.NewObject(c, [])
-                   let message = serialize(nextType)
+                   let label = fsmInstance.[hd].Label
+                   let message = serialize(label)
                    let role = fsmInstance.[hd].Partner
                    let expression = 
                        match methodName with
@@ -296,6 +301,9 @@ let internal stateSet (fsmInstance:ScribbleProtocole.Root []) =
     (setSeen.Count,setSeen,firstState)
 
 let internal makeRoleList (fsmInstance:ScribbleProtocole.Root []) =
+    let mutable setSeen = Set.empty
     [yield fsmInstance.[0].LocalRole
      for event in fsmInstance do
-        yield event.Partner]
+        if not(setSeen |> contains <| event.Partner) then
+            setSeen <- setSeen.Add(event.Partner)
+            yield event.Partner]
