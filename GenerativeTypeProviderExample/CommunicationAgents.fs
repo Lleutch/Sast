@@ -10,6 +10,7 @@ open System.Text
 open System
 // ScribbleProvider specific namespaces and modules
 open GenerativeTypeProviderExample.DomainModel
+open GenerativeTypeProviderExample.IO
 
 exception TooManyTriesError of string
 
@@ -95,24 +96,7 @@ type AgentReceiver(ipAddress,port) =
 
     let server = new TcpListener(IPAddress.Parse(ipAddress),port)
     let mutable clientMap = Map.empty
-    let cts = new System.Threading.CancellationTokenSource()
  
-    let readObject (s : Stream) =
-        let rec aux (buf: StringBuilder) (dis: BinaryReader) =
-            System.Console.WriteLine("AVANT READ 1 BYTE...")
-            let c = dis.ReadByte()
-            System.Console.WriteLine("APRES READ 1 BYTE :{0}", c)           
-            match c with
-                | n when n = byte(0) -> buf
-                | _ -> aux (buf.Append(char c)) dis 
-        in aux (new StringBuilder()) (new BinaryReader(s))
-
-    let readMessage (s: Stream) =
-        System.Console.WriteLine("AVANT READ...")
-        let message = readObject(s).ToString()
-        System.Console.WriteLine("APRES READ...")
-        System.Text.ASCIIEncoding.ASCII.GetBytes(message)
-    
     let rec waitForCancellation str count =
         match count with
             |n when n=0 -> ()
@@ -136,8 +120,6 @@ type AgentReceiver(ipAddress,port) =
             // CHANGE ABOVE BY READING THE ROLE IN ANOTHER Map<role:string,(IP,PORT)>
             clientMap <- clientMap.Add(readRole,stream)
             System.Console.WriteLine("EST CE QUE SA CONTIENT MTN ????? ... {0} {1} {2} ", clientMap.Count ,clientMap.ContainsKey(readRole), readRole)
-            //cts.Cancel()
-            System.Console.WriteLine("CANCELLATION DU TOKEN ET DU COUP C'EST BON JE DOIS AVOIR LE MAP : {0}", cts.IsCancellationRequested)
             return! loop()
             }
         in loop()

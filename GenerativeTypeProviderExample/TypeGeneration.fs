@@ -8,7 +8,7 @@ open System.Reflection // necessary if we want to use the f# assembly
 // ScribbleProvider specific namespaces and modules
 open GenerativeTypeProviderExample.DomainModel
 open GenerativeTypeProviderExample.CommunicationAgents
-
+open GenerativeTypeProviderExample.IO
 
 (******************* TYPE PROVIDER'S HELPERS *******************)
 
@@ -170,7 +170,7 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
                                     let expression = Expr.NewObject(c, [])  
                                     let name = fsmInstance.[aChoice].Label.Replace("(","").Replace(")","") 
                                     let t = name |> createProvidedIncludedTypeChoice None
-                                                 |> addCstor (<@@ () @@> |> createCstor [])
+                                                 |> addCstor (<@@ name :> obj @@> |> createCstor []) // RETURN TYPES INFORMATIONS ....
                                     t.SetBaseTypeDelayed( fun() -> choiceType.DeclaringType.GetNestedType("LabelChoice"+ string event.CurrentState))                                   
                                     mapping <- mapping.Add(fsmInstance.[aChoice].Label,t)
                                     listeLabelSeen <- fsmInstance.[aChoice].Label::listeLabelSeen
@@ -181,7 +181,7 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
                                     let expression = Expr.NewObject(c, [])  
                                     let name = fsmInstance.[hd].Label.Replace("(","").Replace(")","") 
                                     let t = name |> createProvidedIncludedTypeChoice None
-                                                 |> addCstor (<@@ () @@> |> createCstor [])
+                                                 |> addCstor (<@@ name :> obj @@> |> createCstor [])
                                     t.SetBaseTypeDelayed( fun() -> choiceType.DeclaringType.GetNestedType("LabelChoice"+ string event.CurrentState))
                                     mapping <- mapping.Add(fsmInstance.[hd].Label,t)
                                     listeLabelSeen <- fsmInstance.[hd].Label::listeLabelSeen
@@ -191,7 +191,7 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
         else if not(alreadySeen listeLabelSeen event.Label) then
             let name = event.Label.Replace("(","").Replace(")","") 
             let t = name |> createProvidedIncludedType
-                         |> addCstor (<@@ () @@> |> createCstor [])
+                         |> addCstor (<@@ name :> obj @@> |> createCstor [])
             mapping <- mapping.Add(event.Label,t)
             listeLabelSeen <- event.Label::listeLabelSeen
             listeType <- t::listeType
@@ -204,11 +204,6 @@ let internal makeStateTypeBase (n:int) (s:string) =
 
 let internal makeStateType (n:int) = makeStateTypeBase n "State"
 
-let internal serialize (label:string) = // TODO: DEAL WITH SERIALIZATION AND DESERIALIZATION
-    let fin = System.Text.ASCIIEncoding.ASCII.GetString([|byte(0)|])
-    let message = sprintf "%s%s" label fin
-    System.Text.ASCIIEncoding.ASCII.GetBytes(message)
-
 
 let rec goingThrough (methodName:string) (providedList:ProvidedTypeDefinition list) (aType:ProvidedTypeDefinition) (indexList:int list) 
                      (mLabel:Map<string,ProvidedTypeDefinition>) (mRole:Map<string,ProvidedTypeDefinition>) (fsmInstance:ScribbleProtocole.Root []) =
@@ -218,14 +213,17 @@ let rec goingThrough (methodName:string) (providedList:ProvidedTypeDefinition li
         |[b] -> let nextType = findProvidedType providedList fsmInstance.[b].NextState
                 let c = nextType.GetConstructors().[0]
                 let exprState = Expr.NewObject(c, [])
-                let label = fsmInstance.[b].Label
-                let message = serialize(label)
+                let fullName = fsmInstance.[b].Label
+                let message = serialize fullName
                 let role = fsmInstance.[b].Partner
                 let expression =
                     match methodName with
                         |"send" ->  let exprAction = <@@ Regarder.sendMessage "agent" message role @@>
                                     Expr.Sequential(exprAction,exprState)
-                        |"receive" -> let exprAction = <@@ Regarder.receiveMessage "agent" message role @@>
+                        |"receive" -> let exprAction = <@@ //async{
+                                                           Regarder.receiveMessage "agent" message role
+                                                           //       deserialize bytes fullName 
+                                                            @@>
                                           //let expected = deserialize(nextType)
                                           //raise(Error)
                                       Expr.Sequential(exprAction,exprState)
@@ -236,14 +234,18 @@ let rec goingThrough (methodName:string) (providedList:ProvidedTypeDefinition li
         |hd::tl -> let nextType = findProvidedType providedList fsmInstance.[hd].NextState
                    let c = nextType.GetConstructors().[0]
                    let exprState = Expr.NewObject(c, [])
-                   let label = fsmInstance.[hd].Label
-                   let message = serialize(label)
+                   let fullName = fsmInstance.[hd].Label
+                   let message = serialize(fullName)
                    let role = fsmInstance.[hd].Partner
                    let expression = 
                        match methodName with
-                           |"send" -> let exprAction = <@@ Regarder.sendMessage "agent" message role @@>
+                           |"send" -> let exprAction = <@@  let message = serialize(fullName)
+                                                            Regarder.sendMessage "agent" message role @@>
                                       Expr.Sequential(exprAction,exprState)
-                           |"receive" -> let exprAction = <@@ Regarder.receiveMessage "agent" message role @@>
+                           |"receive" -> let exprAction = <@@ //async{
+                                                              Regarder.receiveMessage "agent" message role
+                                                              //    deserialize bytes fullName 
+                                                               @@>
                                               //let expected = deserialize(nextType)
                                               //raise(Error) 
                                          Expr.Sequential(exprAction,exprState)
