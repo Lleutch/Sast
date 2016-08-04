@@ -14,13 +14,13 @@ open GenerativeTypeProviderExample.IO
 
 // CREATING TYPES, NESTED TYPES, METHODS, PROPERTIES, CONSTRUCTORS
 let internal createProvidedType assembly name = 
-    ProvidedTypeDefinition(assembly, ns, name, Some baseType)//, IsErased=false)
+    ProvidedTypeDefinition(assembly, ns, name, Some baseType, IsErased=false)
 
 let internal createProvidedIncludedType name = 
-    ProvidedTypeDefinition(name,Some baseType)//, IsErased=false)
+    ProvidedTypeDefinition(name,Some baseType, IsErased=false)
 
-let internal createProvidedIncludedTypeChoice typing name =
-    ProvidedTypeDefinition(name, typing)// , IsErased=false)
+//let internal createProvidedIncludedTypeChoice typing name =
+//    ProvidedTypeDefinition(name, Some typing , IsErased=false)
 
 let internal createMethodType name param typing expression =
     ProvidedMethod( name, param, typing, InvokeCode = (fun args -> expression ))
@@ -33,9 +33,9 @@ let internal createCstor param expression =
 
 
 // ADDING TYPES, NESTED TYPES, METHODS, PROPERTIES, CONSTRUCTORS TO THE ASSEMBLY AND AS MEMBERS OF THE TYPE PROVIDER
-//let internal addProvidedTypeToAssembly (providedType:ProvidedTypeDefinition)=
-//    asm.AddTypes([providedType])
-//    providedType
+let internal addProvidedTypeToAssembly (providedType:ProvidedTypeDefinition)=
+    asm.AddTypes([providedType])
+    providedType
 
 let internal addIncludedTypeToProvidedType nestedTypeToAdd (providedType:ProvidedTypeDefinition) =
     providedType.AddMembers(nestedTypeToAdd)
@@ -149,6 +149,8 @@ let internal makeRoleTypes (fsmInstance:ScribbleProtocole.Root []) =
     (mapping,listeType)
 
 
+
+
 let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedList: ProvidedTypeDefinition list) = 
     let mutable listeLabelSeen = []
     let mutable listeType = []
@@ -158,6 +160,7 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
             
             let choiceType = ("LabelChoice" + string event.CurrentState) |> createProvidedIncludedType
                                                                          |> addCstor ( <@@ () @@> |> createCstor [])
+            choiceType.SetAttributes (TypeAttributes.Public ||| TypeAttributes.Class)
             mapping <- mapping.Add("LabelChoice"+ string event.CurrentState,choiceType)
             listeType <- choiceType::listeType 
             let listIndexChoice = findSameCurrent event.CurrentState fsmInstance
@@ -168,21 +171,26 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
                                     let nextType = findProvidedType providedList fsmInstance.[aChoice].NextState
                                     let c = nextType.GetConstructors().[0]
                                     let expression = Expr.NewObject(c, [])  
-                                    let name = fsmInstance.[aChoice].Label.Replace("(","").Replace(")","") 
-                                    let t = name |> createProvidedIncludedTypeChoice None
+                                    let currEvent = fsmInstance.[aChoice] 
+                                    let name = currEvent.Label.Replace("(","").Replace(")","") 
+                                    let t = name |> createProvidedIncludedType //Some (choiceType.GetType()))
                                                  |> addCstor (<@@ name :> obj @@> |> createCstor []) // RETURN TYPES INFORMATIONS ....
-                                    t.SetBaseTypeDelayed( fun() -> choiceType.DeclaringType.GetNestedType("LabelChoice"+ string event.CurrentState))                                   
+                                    
+                                    t.SetBaseType(choiceType)
+                                    //t.SetBaseTypeDelayed( fun() -> choiceType.DeclaringType.GetNestedType("LabelChoice"+ string event.CurrentState))                                   
                                     mapping <- mapping.Add(fsmInstance.[aChoice].Label,t)
                                     listeLabelSeen <- fsmInstance.[aChoice].Label::listeLabelSeen
                                     listeType <- t::listeType     
                     |hd::tl -> if not(alreadySeen listeLabelSeen fsmInstance.[hd].Label) then
                                     let nextType = findProvidedType providedList fsmInstance.[hd].NextState
                                     let c = nextType.GetConstructors().[0]
-                                    let expression = Expr.NewObject(c, [])  
-                                    let name = fsmInstance.[hd].Label.Replace("(","").Replace(")","") 
-                                    let t = name |> createProvidedIncludedTypeChoice None
+                                    let expression = Expr.NewObject(c, []) 
+                                    let currEvent = fsmInstance.[hd] 
+                                    let name = currEvent.Label.Replace("(","").Replace(")","") 
+                                    let t = name |> createProvidedIncludedType // (Some typeof<obj>) //(Some (choiceType.GetType()))
                                                  |> addCstor (<@@ name :> obj @@> |> createCstor [])
-                                    t.SetBaseTypeDelayed( fun() -> choiceType.DeclaringType.GetNestedType("LabelChoice"+ string event.CurrentState))
+                                    t.SetBaseType(choiceType)
+                                    //t.SetBaseTypeDelayed( fun() -> choiceType.DeclaringType.GetNestedType("LabelChoice"+ string event.CurrentState))
                                     mapping <- mapping.Add(fsmInstance.[hd].Label,t)
                                     listeLabelSeen <- fsmInstance.[hd].Label::listeLabelSeen
                                     listeType <- t::listeType  
@@ -192,6 +200,7 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
             let name = event.Label.Replace("(","").Replace(")","") 
             let t = name |> createProvidedIncludedType
                          |> addCstor (<@@ name :> obj @@> |> createCstor [])
+
             mapping <- mapping.Add(event.Label,t)
             listeLabelSeen <- event.Label::listeLabelSeen
             listeType <- t::listeType
@@ -205,6 +214,26 @@ let internal makeStateTypeBase (n:int) (s:string) =
 let internal makeStateType (n:int) = makeStateTypeBase n "State"
 
 
+let internal createProvidedParameters (event : ScribbleProtocole.Root) =
+    let generic = typeof<Buf<_>>.GetGenericTypeDefinition() 
+    let payload = event.Payload
+    let mutable n = 0
+
+    [for param in payload do
+        n <- n+1
+        let genType = generic.MakeGenericType(System.Type.GetType(param))
+        yield ProvidedParameter(("Payload_" + string n),genType)] // returns all the buffer
+
+
+let internal toProvidedList (array:_ []) =
+    [for i in 0..(array.Length-1) do
+        yield ProvidedParameter(("Payload_" + string i),System.Type.GetType(array.[i]))]
+
+let internal toList (array:_ []) =
+    [for elem in array do
+        yield elem ]
+
+
 let rec goingThrough (methodName:string) (providedList:ProvidedTypeDefinition list) (aType:ProvidedTypeDefinition) (indexList:int list) 
                      (mLabel:Map<string,ProvidedTypeDefinition>) (mRole:Map<string,ProvidedTypeDefinition>) (fsmInstance:ScribbleProtocole.Root []) =
         match indexList with
@@ -213,47 +242,97 @@ let rec goingThrough (methodName:string) (providedList:ProvidedTypeDefinition li
         |[b] -> let nextType = findProvidedType providedList fsmInstance.[b].NextState
                 let c = nextType.GetConstructors().[0]
                 let exprState = Expr.NewObject(c, [])
-                let fullName = fsmInstance.[b].Label
+                let event = fsmInstance.[b]
+                let fullName = event.Label
                 let message = serialize fullName
-                let role = fsmInstance.[b].Partner
-                let expression =
+                let role = event.Partner
+                let listTypes = 
                     match methodName with
-                        |"send" ->  let exprAction = <@@ Regarder.sendMessage "agent" message role @@>
-                                    Expr.Sequential(exprAction,exprState)
-                        |"receive" -> let exprAction = <@@ //async{
-                                                           Regarder.receiveMessage "agent" message role
-                                                           //       deserialize bytes fullName 
-                                                            @@>
-                                          //let expected = deserialize(nextType)
-                                          //raise(Error)
-                                      Expr.Sequential(exprAction,exprState)
-                        |_ -> <@@ printfn "Error" @@>
+                        |"send" -> toProvidedList event.Payload
+                        |"receive" -> createProvidedParameters event
+                        | _ -> []
+                let listParam = 
+                    match methodName with
+                        |"send" | "receive" -> List.append [ProvidedParameter("Label",mLabel.[fullName]);ProvidedParameter("Role",mRole.[role])] listTypes
+                        | _  -> []
+                   
+                let myMethod = ProvidedMethod(methodName,listParam,nextType,
+                                                        IsStaticMethod = false,
+                                                        InvokeCode = fun args-> let buffers = args.Tail.Tail.Tail
+                                                                                match methodName with
+                                                                                    |"send" -> let buf = serializeMessage fullName (toList event.Payload) buffers
+                                                                                               //let buf = serialize fullName
+                                                                                               let exprAction = <@@ Regarder.sendMessage "agent" (%%buf:byte[]) role @@>
+                                                                                               //let exprAction = <@@ Regarder.sendMessage "agent" buf role @@>
+                                                                                               Expr.Sequential(exprAction,exprState)
+                                                                                    |"receive" -> let listPayload = (toList event.Payload)
+                                                                                                  let exprAction = <@@ let received = Regarder.receiveMessage "agent" [message] role  listPayload
+                                                                                                                       let result = Async.RunSynchronously(received) 
+                                                                                                                       result |> List.iter (printfn "ALLEZ PUTINNNNNNNNN : %A")  
+                                                                                                                       result 
+                                                                                                                               //deserializeMessage buffers received listPayload  |> ignore
+                                                                                                                       @@> // We can a TimeOut if we wait to long
+                                                                                                  let exprDeserialize = deserializeMessage buffers exprAction listPayload
+                                                                                                  let expr = Expr.Sequential(exprAction,exprDeserialize)
+                                                                                                  //exprState
+                                                                                                  Expr.Sequential(expr,exprState)
+                                                                                    |_ -> <@@ printfn "Error" @@> )
+       
                 aType 
-                    |> addMethod ( expression |> createMethodType methodName [ProvidedParameter("Label",mLabel.[fsmInstance.[b].Label]);ProvidedParameter("Role",mRole.[fsmInstance.[b].Partner])] nextType)
-                    |> ignore
+                      |> addMethod myMethod
+                      |> ignore
+
         |hd::tl -> let nextType = findProvidedType providedList fsmInstance.[hd].NextState
                    let c = nextType.GetConstructors().[0]
                    let exprState = Expr.NewObject(c, [])
-                   let fullName = fsmInstance.[hd].Label
+                   let event = fsmInstance.[hd]
+                   let fullName = event.Label
                    let message = serialize(fullName)
-                   let role = fsmInstance.[hd].Partner
-                   let expression = 
-                       match methodName with
-                           |"send" -> let exprAction = <@@  let message = serialize(fullName)
-                                                            Regarder.sendMessage "agent" message role @@>
-                                      Expr.Sequential(exprAction,exprState)
-                           |"receive" -> let exprAction = <@@ //async{
-                                                              Regarder.receiveMessage "agent" message role
-                                                              //    deserialize bytes fullName 
-                                                               @@>
-                                              //let expected = deserialize(nextType)
-                                              //raise(Error) 
-                                         Expr.Sequential(exprAction,exprState)
-                           |_ -> <@@ printfn "Error" @@>
+                   let role = event.Partner
+                   let listTypes = 
+                    match methodName with
+                        |"send" -> toProvidedList event.Payload
+                        |"receive" -> createProvidedParameters event
+                        | _ -> []
+                   let listParam = 
+                    match methodName with
+                        |"send" | "receive" -> List.append [ProvidedParameter("Label",mLabel.[fullName]);ProvidedParameter("Role",mRole.[role])] listTypes
+                        | _  -> []
+                   
+                   let myMethod = ProvidedMethod(methodName,listParam,nextType,
+                                                        IsStaticMethod = false,
+                                                        InvokeCode = fun args-> let buffers = args.Tail.Tail.Tail
+                                                                                match methodName with
+                                                                                    |"send" -> let buf = serializeMessage fullName (toList event.Payload) buffers
+                                                                                               //let buf = serialize fullName
+                                                                                               let exprAction = <@@ Regarder.sendMessage "agent" (%%buf:byte[]) role @@>
+                                                                                               //let exprAction = <@@ Regarder.sendMessage "agent" buf role @@> 
+                                                                                               Expr.Sequential(exprAction,exprState)
+                                                                                    |"receive" -> let listPayload = (toList event.Payload)
+                                                                                                  let exprAction = <@@ let received = Regarder.receiveMessage "agent" [message] role  listPayload
+                                                                                                                       let result = Async.RunSynchronously(received) 
+                                                                                                                       result |> List.iter (printfn "ALLEZ PUTINNNNNNNNN : %A")  
+                                                                                                                       result 
+                                                                                                                       @@> // We can a TimeOut if we wait to long
+                                                                                                  let exprDeserialize = deserializeMessage buffers exprAction listPayload
+                                                                                                  let expr = Expr.Sequential(exprAction,exprDeserialize)
+                                                                                                  //exprState
+                                                                                                  Expr.Sequential(expr,exprState)
+                                                                                    |_ -> <@@ printfn "Error" @@> )
+       
                    aType 
-                        |> addMethod ( expression |> createMethodType methodName [ProvidedParameter("Label",mLabel.[fsmInstance.[hd].Label]);ProvidedParameter("Role",mRole.[fsmInstance.[hd].Partner])] nextType)
+                        |> addMethod myMethod
                         |> ignore                
                    goingThrough methodName providedList aType tl mLabel mRole fsmInstance 
+
+
+let internal getAllChoiceLabels (indexList : int list) (fsmInstance:ScribbleProtocole.Root []) =
+    let rec aux list acc =
+        match list with
+            |[] -> acc
+            |hd::tl -> let labelBytes = fsmInstance.[hd].Label |> serialize
+                       aux tl (labelBytes::acc) 
+    in aux indexList []
 
 
 let rec addProperties (providedListStatic:ProvidedTypeDefinition list) (providedList:ProvidedTypeDefinition list) (stateList: int list) 
@@ -267,13 +346,22 @@ let rec addProperties (providedListStatic:ProvidedTypeDefinition list) (provided
     match providedList with
         |[] -> ()
         |[aType] -> match methodName with
-                        |"send" -> goingThrough methodName providedListStatic aType indexList mLabel mRole fsmInstance
+                        |"send" ->  goingThrough methodName providedListStatic aType indexList mLabel mRole fsmInstance
                         |"receive" -> goingThrough methodName providedListStatic aType indexList mLabel mRole fsmInstance 
                         |"choice" -> let labelType = mLabel.["LabelChoice"+ string currentState]
                                      let c = labelType.GetConstructors().[0]
-                                     let expression = Expr.NewObject(c,[])
-                                     aType |> addMethod ( expression |> createMethodType "receive" [] labelType ) |> ignore
-                        |"finish" -> goingThrough methodName providedListStatic aType indexList mLabel mRole fsmInstance 
+                                     let exprLabel = Expr.NewObject(c,[])
+                                     let listExpectedMessages = getAllChoiceLabels indexList fsmInstance
+                                     let event = fsmInstance.[indexOfState]
+                                     let role = event.Partner
+                                     let myMethod = ProvidedMethod("branch",[],labelType,
+                                                                                    IsStaticMethod = false,
+                                                                                    InvokeCode = fun args-> let listPayload = (toList event.Payload)
+                                                                                                            let exprAction = <@@ Regarder.receiveMessage "agent" listExpectedMessages role listPayload @@>
+                                                                                                            Expr.Sequential(exprAction,exprLabel) )
+
+                                     aType |> addMethod myMethod |> ignore
+                        |"finish" ->  goingThrough methodName providedListStatic aType indexList mLabel mRole fsmInstance 
                         | _ -> printfn "Not correct"
                     aType |> addProperty (<@@ "essaye Bateau" @@> |> createPropertyType "MyProperty" typeof<string> ) |> ignore
         |hd::tl ->  match methodName with
@@ -281,8 +369,16 @@ let rec addProperties (providedListStatic:ProvidedTypeDefinition list) (provided
                         |"receive" -> goingThrough methodName providedListStatic hd indexList mLabel mRole fsmInstance 
                         |"choice" -> let labelType = mLabel.["LabelChoice"+ string currentState]
                                      let c = labelType.GetConstructors().[0]
-                                     let expression = Expr.NewObject(c,[]) 
-                                     hd |> addMethod (expression |> createMethodType "receive" [] labelType) |> ignore
+                                     let exprLabel = Expr.NewObject(c,[])
+                                     let listExpectedMessages = getAllChoiceLabels indexList fsmInstance
+                                     let event = fsmInstance.[indexOfState]
+                                     let role = event.Partner
+                                     let myMethod = ProvidedMethod("branch",[],labelType,
+                                                                                    IsStaticMethod = false,
+                                                                                    InvokeCode = fun args-> let listPayload = (toList event.Payload)
+                                                                                                            let exprAction = <@@ Regarder.receiveMessage "agent" listExpectedMessages role listPayload  @@> // TO CHANGE !!!!!!!!!!!!!!!!
+                                                                                                            Expr.Sequential(exprAction,exprLabel) )
+                                     hd |> addMethod myMethod |> ignore
                         |"finish" -> goingThrough methodName providedListStatic hd indexList mLabel mRole fsmInstance 
                         | _ -> printfn "Not correct"
                     hd |> addProperty (<@@ "Test" @@> |> createPropertyType "MyProperty" typeof<string> ) |> ignore

@@ -57,7 +57,7 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
                 |> addIncludedTypeToProvidedType list2
                 |> addIncludedTypeToProvidedType list1
                 |> addIncludedTypeToProvidedType listTypes
-                //|> addProvidedTypeToAssembly
+                |> addProvidedTypeToAssembly
     
     let basePort = 5000
              
@@ -69,7 +69,8 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
 
     do 
         providedType.DefineStaticParameters(parameters,createType)
-        this.AddNamespace(ns, [providedType])//[TypeGeneration.addProvidedTypeToAssembly providedType])
+        //this.AddNamespace(ns, [providedType])
+        this.AddNamespace(ns, [TypeGeneration.addProvidedTypeToAssembly providedType])
 
 [<assembly:TypeProviderAssembly>]
     do()

@@ -48,7 +48,7 @@ type AgentSender(ipAddress,port) =
                                             } |> ignore *)                                            
                                             aux (timeout*2) (count+1)
                                         else
-                                            System.Console.WriteLine("CONNECTEEEEEEEE SA MARCHEEEEEEEEEEEEE")
+                                            System.Console.WriteLine("CONNECTED IT WORKS")
                     |_ -> tcpClient.Connect(IPAddress.Parse(address),p)
                           if not(tcpClient.Connected) then
                               raise (TooManyTriesError("You have tried too many times to connect, the partner is not ready to connect with you"))
@@ -65,11 +65,11 @@ type AgentSender(ipAddress,port) =
             System.Console.WriteLine("THE SENDING METHOD HASN'T BEEN CALLED YET")
             let! msg = actor.Receive()
             match msg with
-                |ReceiveMessage (message,channel,role) ->
+                |ReceiveMessage _ ->
                     () // Raise an exception Error due to bad coding in the type provider
                     return! loop()      
                 |SendMessage (message,role) -> // The serialization is done before
-                    System.Console.WriteLine("SENDING THE MESSAGE : {0}", System.Text.ASCIIEncoding.ASCII.GetString(message))
+                    printfn "SENDING THE MESSAGE : %A" (Array.toList message)
                     do! stream.AsyncWrite(message)
                     return! loop()
             }
@@ -123,6 +123,15 @@ type AgentReceiver(ipAddress,port) =
             return! loop()
             }
         in loop()
+
+    let isIn (aList:_ list) x = 
+        let rec aux list x In =
+            match list with
+                |[] -> In
+                |hd :: tl -> match hd with
+                                |n when n=x -> true
+                                | _ -> aux tl x In
+        in aux aList x false
  
     let receive (actor:Agent<Message>) =
         let rec loop () = async {
@@ -133,7 +142,7 @@ type AgentReceiver(ipAddress,port) =
                 |SendMessage (message,role)->
                     ()  // Raise an exception Error due to bad coding in the type provider
                     return! loop()      
-                |ReceiveMessage (message,channel,role) -> // The UnMarshalling is done outside the Agent Routing Architecture NOT HERE.
+                |ReceiveMessage (message,role,listTypes,channel) -> // The UnMarshalling is done outside the Agent Routing Architecture NOT HERE.
                     //let stream = clientMap.[role]
                     System.Console.WriteLine("AGENT RECEIVER CHERCHE DANS CLIENTMAP... {0} {1} {2}", clientMap.Count ,clientMap.ContainsKey("hey"),role)
                     waitForCancellation "hey" 50 |> ignore // Change th number
@@ -146,8 +155,15 @@ type AgentReceiver(ipAddress,port) =
                     let stream = clientMap.["hey"]
                     System.Console.WriteLine("AGENT RECEIVER VA LIRE UN MESSAGE {0}...", clientMap.ContainsKey("hey"))
                     let read = readMessage stream
-                    System.Console.WriteLine("MESSAGE LU :{0}..." , System.Text.ASCIIEncoding.ASCII.GetString(read))
-                    channel.Reply(read)
+                    printf "MESSAGE LU :%s  MESSAGES ATTENDU:" (System.Text.ASCIIEncoding.ASCII.GetString(read))
+                    message |> Seq.iter (fun x -> printf "%s " (System.Text.ASCIIEncoding.ASCII.GetString(x)) )
+                    channel.Reply([read])
+                    (*match read with
+                        |msg when (message |> isIn <| msg) |> not -> failwith "Received a wrong Label, that doesn't belong to the possible Labels at this state"
+                        | _ -> let buf = readPayload stream listTypes
+                               channel.Reply(buf) //deserializeMessage args stream listTypes*)
+                    //deserialize read message 
+                    //channel.Reply(read) // A quoi sa me sert?
                     return! loop()
             }
         in loop()
@@ -169,13 +185,13 @@ type AgentReceiver(ipAddress,port) =
 
     // Be carefull with this function: IF IT'S NONE RAISE AN EXCEPTION
     member this.ReceiveMessage(message) =
-        System.Console.WriteLine("RECEIVINGGGGGGGGGGGG...")
-        let (msg,channel,role) = message
+        System.Console.WriteLine("RECEIVING...")
+        //let (msg,role,listTypes,channel) = message
         
         match agentReceiver with
             |Some receive -> System.Console.WriteLine("I HAVE AN AGENT RECEIVER...") 
                              receive.Post(Message.ReceiveMessage message )
-                             System.Console.WriteLine("NaaaaaaaNAAAAAAAAAAAAAnaaaaaaaaaa!!!!")
+                             //System.Console.WriteLine("NaaaaaaaNAAAAAAAAAAAAAnaaaaaaaaaa!!!!")
                              //return replyMessage
                              (*   
                              let! replyMessage = receive.PostAndAsyncReply(fun newChannel -> Message.ReceiveMessage (msg,newChannel,role))
@@ -201,22 +217,22 @@ type AgentRouter(agentMap:Map<string,AgentSender>,agentReceiving:AgentReceiver) 
  
     let sendAndReceive (agentRouter:Agent<Message>) =
         let rec loop () = async{
-            System.Console.WriteLine("JE PASSE PAR ICI !!!!!!!!!!!!!!!!!!!!! ?????????????????")
+            System.Console.WriteLine("JE PASSE PAR ICI !")
             let! msg = agentRouter.Receive()
-            System.Console.WriteLine(" ET ENSUITE PAR LA !!!!!!!!!!!!!!!!!!!!! ?????????????????")
+            System.Console.WriteLine(" ET ENSUITE PAR LA !")
             match msg with
                 |SendMessage (message,role) ->
                     System.Console.WriteLine("AGENT ROUTER TEST : Route Message to agentSender, partner = {0} ", role)
                     let agentSender = agentMapping.[role]
                     agentSender.SendMessage(message,role) // Here, message is the serialized message that needs to be sent
                     return! loop()
-                |ReceiveMessage (message,channel,role) -> 
+                |ReceiveMessage (message,role,listTypes,channel) -> 
                     System.Console.WriteLine("AGENT ROUTER TEST : Route Message to agentReceiver, partner = {0} ", role)
                     //let! replyMessage = agentReceiver.ReceiveMessage(message,channel,role) // Be Carefull: message is the serialized version of the Type
-                    agentReceiver.ReceiveMessage(message,channel,role) |> ignore // Be Carefull: message is the serialized version of the Type
+                    agentReceiver.ReceiveMessage(message,role,listTypes,channel) // Be Carefull: message is the serialized version of the Type
                                                                                            // While replyMessage is the message really received from the network 
                     //channel.Reply(replyMessage)
-                    System.Console.WriteLine("ALRIGHTTTTT !!! ")//{0}", System.Text.ASCIIEncoding.ASCII.GetString(replyMessage))
+                    System.Console.WriteLine("ALRIGHTTTTT ! ")//{0}", System.Text.ASCIIEncoding.ASCII.GetString(replyMessage))
                     return! loop()
             }
         in loop()
@@ -238,9 +254,9 @@ type AgentRouter(agentMap:Map<string,AgentSender>,agentReceiving:AgentReceiver) 
    
     member this.ReceiveMessage(message)=
         System.Console.WriteLine("ReceiveMessage METHOD APPELE: dans AgentRouter")
-        let (msg,role) = message
+        let (msg,role,listTypes) = message
         System.Console.WriteLine("Avant ReplyMessage: dans AgentRouter")
-        let replyMessage = agentRouter.PostAndAsyncReply(fun channel -> Message.ReceiveMessage (msg,channel,role))
+        let replyMessage = agentRouter.PostAndAsyncReply(fun channel -> Message.ReceiveMessage (msg,role,listTypes,channel))
         System.Console.WriteLine("ReplyMessage recu: dans AgentRouter")
         replyMessage
         

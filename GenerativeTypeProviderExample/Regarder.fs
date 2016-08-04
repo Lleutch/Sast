@@ -1,6 +1,7 @@
 ﻿module GenerativeTypeProviderExample.Regarder 
 
 open GenerativeTypeProviderExample.CommunicationAgents
+open GenerativeTypeProviderExample.IO
 
 let mutable dico = Map.empty<string,AgentRouter>
 let mutable changed = false
@@ -16,6 +17,7 @@ let startAgentRouter agent =
 let sendMessage agent message role =
     dico.Item(agent).SendMessage(message,role)
 
-let receiveMessage agent message role =
-    dico.Item(agent).ReceiveMessage(message,role)
-    
+
+let receiveMessage agent message role listTypes =
+    dico.Item(agent).ReceiveMessage(message,role,listTypes) 
+    //"agent" args message role (toList event.Payload)
