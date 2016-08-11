@@ -60,9 +60,11 @@
     <Compile Include="ProvidedTypes.fs" />
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="DomainModel.fs" />
-    <Compile Include="IO.fs" />
+    <Compile Include="TypeChoices.fs" />
+    <Compile Include="Runtime.fs" />
     <Compile Include="CommunicationAgents.fs" />
     <Compile Include="Regarder.fs" />
+    <Compile Include="IO.fs" />
     <Compile Include="TypeGeneration.fs" />
     <Compile Include="Library1.fs" />
     <None Include="Script.fsx" />

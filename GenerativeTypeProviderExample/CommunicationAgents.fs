@@ -10,9 +10,13 @@ open System.Text
 open System
 // ScribbleProvider specific namespaces and modules
 open GenerativeTypeProviderExample.DomainModel
-open GenerativeTypeProviderExample.IO
 
 exception TooManyTriesError of string
+
+let internal readMessage (s : Stream) =
+    let dis = new BinaryReader(s)
+    let size = dis.ReadInt32()
+    dis.ReadBytes(size)
 
 type AgentSender(ipAddress,port) =
 
@@ -142,7 +146,7 @@ type AgentReceiver(ipAddress,port) =
                 |SendMessage (message,role)->
                     ()  // Raise an exception Error due to bad coding in the type provider
                     return! loop()      
-                |ReceiveMessage (message,role,listTypes,channel) -> // The UnMarshalling is done outside the Agent Routing Architecture NOT HERE.
+                |ReceiveMessageAsync (message,role,listTypes,channel) -> // The UnMarshalling is done outside the Agent Routing Architecture NOT HERE.
                     //let stream = clientMap.[role]
                     System.Console.WriteLine("AGENT RECEIVER CHERCHE DANS CLIENTMAP... {0} {1} {2}", clientMap.Count ,clientMap.ContainsKey("hey"),role)
                     waitForCancellation "hey" 50 |> ignore // Change th number
@@ -158,6 +162,7 @@ type AgentReceiver(ipAddress,port) =
                     printf "MESSAGE LU :%s  MESSAGES ATTENDU:" (System.Text.ASCIIEncoding.ASCII.GetString(read))
                     message |> Seq.iter (fun x -> printf "%s " (System.Text.ASCIIEncoding.ASCII.GetString(x)) )
                     channel.Reply([read])
+                    printf "ET LAAAAAAA ?"
                     (*match read with
                         |msg when (message |> isIn <| msg) |> not -> failwith "Received a wrong Label, that doesn't belong to the possible Labels at this state"
                         | _ -> let buf = readPayload stream listTypes
@@ -165,6 +170,24 @@ type AgentReceiver(ipAddress,port) =
                     //deserialize read message 
                     //channel.Reply(read) // A quoi sa me sert?
                     return! loop()
+                |ReceiveMessage (message,role,listTypes,channel) ->
+                    System.Console.WriteLine("AGENT RECEIVER CHERCHE DANS CLIENTMAP... {0} {1} {2}", clientMap.Count ,clientMap.ContainsKey("hey"),role)
+                    waitForCancellation "hey" 50 |> ignore // Change th number
+                    if not(clientMap.ContainsKey("hey")) then
+                        waitForCancellation "hey" 1 |> ignore // Change th number
+                    (*if not(clientMap.ContainsKey("hey")) then
+                        System.Console.WriteLine("LA SA PASSE C'EST SUR ET CERTAIN")
+                        Async.RunSynchronously(waitForCancellation "hey" 10)//,cancellationToken=cts.Token) *)
+                    System.Console.WriteLine("JE CROIS QUE J'EN SUIS LA ...")
+                    let stream = clientMap.["hey"]
+                    System.Console.WriteLine("AGENT RECEIVER VA LIRE UN MESSAGE {0}...", clientMap.ContainsKey("hey"))
+                    let read = readMessage stream
+                    printf "MESSAGE LU :%s  MESSAGES ATTENDU:" (System.Text.ASCIIEncoding.ASCII.GetString(read))
+                    message |> Seq.iter (fun x -> printf "%s " (System.Text.ASCIIEncoding.ASCII.GetString(x)) )
+                    channel.Reply([read])
+                    printf "ET LAAAAAAA ?"
+                    return! loop()
+                    
             }
         in loop()
  
@@ -184,13 +207,13 @@ type AgentReceiver(ipAddress,port) =
         server.Stop()
 
     // Be carefull with this function: IF IT'S NONE RAISE AN EXCEPTION
-    member this.ReceiveMessage(message) =
+    member this.ReceiveMessageAsync(message) =
         System.Console.WriteLine("RECEIVING...")
         //let (msg,role,listTypes,channel) = message
         
         match agentReceiver with
             |Some receive -> System.Console.WriteLine("I HAVE AN AGENT RECEIVER...") 
-                             receive.Post(Message.ReceiveMessage message )
+                             receive.Post(Message.ReceiveMessageAsync message )
                              //System.Console.WriteLine("NaaaaaaaNAAAAAAAAAAAAAnaaaaaaaaaa!!!!")
                              //return replyMessage
                              (*   
@@ -205,6 +228,29 @@ type AgentReceiver(ipAddress,port) =
                         //let label,_,_ = message
                         //return label
                      //}        
+    member this.ReceiveMessage(message) =
+        System.Console.WriteLine("RECEIVING...")
+        //let (msg,role,listTypes,channel) = message
+        let (msg,role,listTypes,ch) = message
+        match agentReceiver with
+            |Some receive -> System.Console.WriteLine("I HAVE AN AGENT RECEIVER...") 
+                             let replyMessage = receive.PostAndReply(fun channel -> Message.ReceiveMessage (msg,role,listTypes,channel))
+                             //receive.Post(Message.ReceiveMessage message )
+                             replyMessage
+                             //System.Console.WriteLine("NaaaaaaaNAAAAAAAAAAAAAnaaaaaaaaaa!!!!")
+                             //return replyMessage
+                             (*   
+                             let! replyMessage = receive.PostAndAsyncReply(fun newChannel -> Message.ReceiveMessage (msg,newChannel,role))
+                             System.Console.WriteLine("NaaaaaaaNAAAAAAAAAAAAAnaaaaaaaaaa!!!!")
+                             return replyMessage *)
+                             //channel.Reply(replyMessage)
+                            
+            |None -> failwith " On verra plus tard"
+                     //async{
+                     //   ()
+                        //let label,_,_ = message
+                        //return label
+                     //}     
 
 
 
@@ -226,13 +272,22 @@ type AgentRouter(agentMap:Map<string,AgentSender>,agentReceiving:AgentReceiver) 
                     let agentSender = agentMapping.[role]
                     agentSender.SendMessage(message,role) // Here, message is the serialized message that needs to be sent
                     return! loop()
-                |ReceiveMessage (message,role,listTypes,channel) -> 
-                    System.Console.WriteLine("AGENT ROUTER TEST : Route Message to agentReceiver, partner = {0} ", role)
+                |ReceiveMessageAsync (message,role,listTypes,channel) -> 
+                    System.Console.WriteLine("AGENT ROUTER TEST : Route Message to agentReceiver ASynchrone, partner = {0} ", role)
                     //let! replyMessage = agentReceiver.ReceiveMessage(message,channel,role) // Be Carefull: message is the serialized version of the Type
-                    agentReceiver.ReceiveMessage(message,role,listTypes,channel) // Be Carefull: message is the serialized version of the Type
+                    agentReceiver.ReceiveMessageAsync(message,role,listTypes,channel) // Be Carefull: message is the serialized version of the Type
                                                                                            // While replyMessage is the message really received from the network 
                     //channel.Reply(replyMessage)
-                    System.Console.WriteLine("ALRIGHTTTTT ! ")//{0}", System.Text.ASCIIEncoding.ASCII.GetString(replyMessage))
+                    System.Console.WriteLine("ALRIGHTTTTT  AAAASYNC ! ")//{0}", System.Text.ASCIIEncoding.ASCII.GetString(replyMessage))
+                    return! loop()
+                |ReceiveMessage (message,role,listTypes,channel) -> 
+                    System.Console.WriteLine("AGENT ROUTER TEST : Route Message to agentReceiver Synchrone, partner = {0} ", role)
+                    //let! replyMessage = agentReceiver.ReceiveMessage(message,channel,role) // Be Carefull: message is the serialized version of the Type
+                    let message = agentReceiver.ReceiveMessage(message,role,listTypes,channel) // Be Carefull: message is the serialized version of the Type
+                    printfn("trY HERE")
+                    channel.Reply(message)                                                                                   // While replyMessage is the message really received from the network 
+                    //channel.Reply(replyMessage)
+                    System.Console.WriteLine("ALRIGHTTTTT SYNC ! ")//{0}", System.Text.ASCIIEncoding.ASCII.GetString(replyMessage))
                     return! loop()
             }
         in loop()
@@ -256,9 +311,17 @@ type AgentRouter(agentMap:Map<string,AgentSender>,agentReceiving:AgentReceiver) 
         System.Console.WriteLine("ReceiveMessage METHOD APPELE: dans AgentRouter")
         let (msg,role,listTypes) = message
         System.Console.WriteLine("Avant ReplyMessage: dans AgentRouter")
-        let replyMessage = agentRouter.PostAndAsyncReply(fun channel -> Message.ReceiveMessage (msg,role,listTypes,channel))
+        let replyMessage = agentRouter.PostAndReply(fun channel -> Message.ReceiveMessage (msg,role,listTypes,channel))
         System.Console.WriteLine("ReplyMessage recu: dans AgentRouter")
         replyMessage
+
+    member this.ReceiveMessageAsync(message) = 
+        System.Console.WriteLine("ReceiveMessage METHOD APPELE: dans AgentRouter")
+        let (msg,role,listTypes) = message
+        System.Console.WriteLine("Avant ReplyMessage: dans AgentRouter")
+        let replyMessage = agentRouter.PostAndAsyncReply(fun channel -> Message.ReceiveMessageAsync (msg,role,listTypes,channel))
+        System.Console.WriteLine("ReplyMessage recu: dans AgentRouter")
+        replyMessage        
         
 
 let private createMapAgentSenders (infos:Map<string,string*int>) =

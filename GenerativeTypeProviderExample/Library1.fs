@@ -50,14 +50,16 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
         let exprStart = <@@ Regarder.startAgentRouter "agent" @@>
         let expression = Expr.Sequential(exprStart,exprCtor)
         
-        name 
-                |> createProvidedType tmpAsm
-                |> addCstor ( <@@ "hey" + string n @@> |> createCstor [])
-                |> addMethod ( expression |> createMethodType "Start" [] firstStateType)
-                |> addIncludedTypeToProvidedType list2
-                |> addIncludedTypeToProvidedType list1
-                |> addIncludedTypeToProvidedType listTypes
-                |> addProvidedTypeToAssembly
+        let ty = name 
+                    |> createProvidedType tmpAsm
+                    |> addCstor ( <@@ "hey" + string n @@> |> createCstor [])
+                    |> addMethod ( expression |> createMethodType "Start" [] firstStateType)
+                    |> addIncludedTypeToProvidedType list2
+                    |> addIncludedTypeToProvidedType list1
+                    |> addIncludedTypeToProvidedType listTypes
+                    |> addProvidedTypeToAssembly
+        ty.SetAttributes(TypeAttributes.Public ||| TypeAttributes.Class)
+        ty
     
     let basePort = 5000
              
