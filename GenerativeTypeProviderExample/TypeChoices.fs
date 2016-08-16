@@ -82,6 +82,3 @@ type Choice38() = class end
 type Choice39() = class end
 
 type Choice40() = class end
-
-
-type Hahaha = interface end

@@ -59,6 +59,7 @@ type AgentSender(ipAddress,port) =
             with
                 | :? System.ArgumentException as ex -> printfn "Argument Exception: %s"  ex.Message
                 | :? System.Net.Sockets.SocketException as ex ->  printfn "Socket Exception error code: %d"  ex.ErrorCode
+                                                                  aux (timeout*2) (count+1)
                 | :? System.ObjectDisposedException as ex -> printfn "Object Disposed Exception: %s"  ex.Message
                 | TooManyTriesError(str) -> printfn "Too Many Tries Error: %s" str
         
@@ -69,6 +70,9 @@ type AgentSender(ipAddress,port) =
             System.Console.WriteLine("THE SENDING METHOD HASN'T BEEN CALLED YET")
             let! msg = actor.Receive()
             match msg with
+                |ReceiveMessageAsync _ ->
+                    ()
+                    return! loop()
                 |ReceiveMessage _ ->
                     () // Raise an exception Error due to bad coding in the type provider
                     return! loop()      
@@ -260,6 +264,8 @@ type AgentRouter(agentMap:Map<string,AgentSender>,agentReceiving:AgentReceiver) 
     
     let agentMapping = agentMap
     let agentReceiver = agentReceiving
+
+    let mutable (payloadChoice:byte[] list) = []
  
     let sendAndReceive (agentRouter:Agent<Message>) =
         let rec loop () = async{
@@ -313,6 +319,7 @@ type AgentRouter(agentMap:Map<string,AgentSender>,agentReceiving:AgentReceiver) 
         System.Console.WriteLine("Avant ReplyMessage: dans AgentRouter")
         let replyMessage = agentRouter.PostAndReply(fun channel -> Message.ReceiveMessage (msg,role,listTypes,channel))
         System.Console.WriteLine("ReplyMessage recu: dans AgentRouter")
+        payloadChoice <- replyMessage.Tail
         replyMessage
 
     member this.ReceiveMessageAsync(message) = 
@@ -322,6 +329,9 @@ type AgentRouter(agentMap:Map<string,AgentSender>,agentReceiving:AgentReceiver) 
         let replyMessage = agentRouter.PostAndAsyncReply(fun channel -> Message.ReceiveMessageAsync (msg,role,listTypes,channel))
         System.Console.WriteLine("ReplyMessage recu: dans AgentRouter")
         replyMessage        
+
+    member this.ReceiveChoice()=
+        payloadChoice
         
 
 let private createMapAgentSenders (infos:Map<string,string*int>) =

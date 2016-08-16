@@ -126,6 +126,29 @@ let rec findProvidedType (providedList:ProvidedTypeDefinition list) stateValue =
                    else
                        findProvidedType tl stateValue      
 
+
+
+
+let internal createProvidedParameters (event : ScribbleProtocole.Root) =
+    let generic = typeof<Buf<_>>.GetGenericTypeDefinition() 
+    let payload = event.Payload
+    let mutable n = 0
+
+    [for param in payload do
+        n <- n+1
+        let genType = generic.MakeGenericType(System.Type.GetType(param))
+        yield ProvidedParameter(("Payload_" + string n),genType)] // returns all the buffer
+
+
+let internal toProvidedList (array:_ []) =
+    [for i in 0..(array.Length-1) do
+        yield ProvidedParameter(("Payload_" + string i),System.Type.GetType(array.[i]))]
+
+let internal toList (array:_ []) =
+    [for elem in array do
+        yield elem ]
+
+
                        
 let internal makeRoleTypes (fsmInstance:ScribbleProtocole.Root []) = 
     let mutable liste = [fsmInstance.[0].LocalRole]
@@ -135,6 +158,7 @@ let internal makeRoleTypes (fsmInstance:ScribbleProtocole.Root []) =
                                         |> createProvidedIncludedType 
                                         |> addCstor ctor
     let t = t |> addProperty (Expr.NewObject(ctor,[]) |> createPropertyType "instance" t)
+    t.HideObjectMethods <- true
     listeType <- t::listeType
     let mutable mapping = Map.empty<_,ProvidedTypeDefinition>.Add(fsmInstance.[0].LocalRole,t)
     for event in fsmInstance do
@@ -143,7 +167,8 @@ let internal makeRoleTypes (fsmInstance:ScribbleProtocole.Root []) =
             let t = event.Partner 
                                     |> createProvidedIncludedType
                                     |> addCstor ctor    
-            let t = t |> addProperty (Expr.NewObject(ctor, []) |> createPropertyType "instance" t)                                                                     
+            let t = t |> addProperty (Expr.NewObject(ctor, []) |> createPropertyType "instance" t)
+            t.HideObjectMethods <- true                                                                     
             mapping <- mapping.Add(event.Partner,t)
             liste <- event.Partner::liste
             listeType <- t::listeType
@@ -174,12 +199,22 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
                                                                                         let currEvent = fsmInstance.[aChoice] 
                                                                                         let name = currEvent.Label.Replace("(","").Replace(")","") 
                                                                                         
+                                                                                        let listParam = createProvidedParameters event
+                                                                                        let listPayload = (toList event.Payload)   
+                                                                                        let myMethod = ProvidedMethod("receive",listParam,nextType,
+                                                                                                                        IsStaticMethod = false,
+                                                                                                                        InvokeCode = fun args-> let buffers = args.Tail.Tail
+                                                                                                                                                let listPayload = (toList event.Payload)
+                                                                                                                                                let exprUnit = <@@ () @@>
+                                                                                                                                                let exprDes = deserializeChoice buffers listPayload
+                                                                                                                                                Expr.Sequential(exprDes,exprUnit) )
+                                                                                                                                                
                                                                                         let t = name |> createProvidedIncludedTypeChoice typeCtor
                                                                                                      |> addCstor ([] |> createCstor <|  <@@ () @@>)
-                                                                                                     |> addMethod (nextType |> createMethodType "next" [] <| <@@ () @@>)
-                                                                                                     
+                                                                                                     |> addMethod (myMethod)
+
                                                                                         t.SetAttributes(TypeAttributes.Public ||| TypeAttributes.Class)
-                                                                                        
+                                                                                        t.HideObjectMethods <- true
                                                                                         mapping <- mapping.Add(fsmInstance.[aChoice].Label,t)
                                                                                         listeLabelSeen <- fsmInstance.[aChoice].Label::listeLabelSeen
                                                                                         listeType <- (t :> System.Type )::listeType  
@@ -188,9 +223,19 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
                                                                                         let currEvent = fsmInstance.[hd] 
                                                                                         let name = currEvent.Label.Replace("(","").Replace(")","") 
                                                                                         
+                                                                                        let listParam = createProvidedParameters event
+                                                                                        let listPayload = (toList event.Payload)   
+                                                                                        let myMethod = ProvidedMethod("receive",listParam,nextType,
+                                                                                                                        IsStaticMethod = false,
+                                                                                                                        InvokeCode = fun args-> let buffers = args.Tail.Tail
+                                                                                                                                                let listPayload = (toList event.Payload)
+                                                                                                                                                let exprUnit = <@@ () @@>
+                                                                                                                                                let exprDes = deserializeChoice buffers listPayload
+                                                                                                                                                Expr.Sequential(exprDes,exprUnit) )
+
                                                                                         let t= name |> createProvidedIncludedTypeChoice typeCtor
                                                                                                     |> addCstor ([] |> createCstor <|  <@@ () @@>)
-                                                                                                    |> addMethod (nextType |> createMethodType "next" [] <| <@@ () @@>)
+                                                                                                    |> addMethod (myMethod)
                                                                                         t.SetAttributes(TypeAttributes.Public ||| TypeAttributes.Class)
                                                                                        
                                                                                         mapping <- mapping.Add(fsmInstance.[hd].Label,t)
@@ -199,13 +244,12 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
                                                                                         
                                                                                         aux tl 
                                                                 in aux listIndexChoice 
-                | _ -> failwith ("number of choice > " + TypeChoices.NUMBER_OF_CHOICES.ToString() + " : CHAHHH va chez ta mere ") 
+                | _ -> failwith ("number of choices > " + TypeChoices .NUMBER_OF_CHOICES.ToString() + " : This protocol won't be taken in account by this TP. ") 
 
         else if not(alreadySeen listeLabelSeen event.Label) then
             let name = event.Label.Replace("(","").Replace(")","") 
             let t = name |> createProvidedIncludedType
                          |> addCstor (<@@ name :> obj @@> |> createCstor [])
-
             mapping <- mapping.Add(event.Label,t)
             listeLabelSeen <- event.Label::listeLabelSeen
             listeType <- ( t :> System.Type )::listeType
@@ -213,43 +257,26 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
 
 
 let internal makeStateTypeBase (n:int) (s:string) = 
-    (s + string n) |> createProvidedIncludedType
-                   |> addCstor (<@@ s+ string n @@> |> createCstor [])
+    let ty = (s + string n) |> createProvidedIncludedType
+                            |> addCstor (<@@ s+ string n @@> |> createCstor [])
+    ty.HideObjectMethods <- true
+    ty
 
 let internal makeStateType (n:int) = makeStateTypeBase n "State"
 
 
-let internal createProvidedParameters (event : ScribbleProtocole.Root) =
-    let generic = typeof<Buf<_>>.GetGenericTypeDefinition() 
-    let payload = event.Payload
-    let mutable n = 0
-
-    [for param in payload do
-        n <- n+1
-        let genType = generic.MakeGenericType(System.Type.GetType(param))
-        yield ProvidedParameter(("Payload_" + string n),genType)] // returns all the buffer
-
-
-let internal toProvidedList (array:_ []) =
-    [for i in 0..(array.Length-1) do
-        yield ProvidedParameter(("Payload_" + string i),System.Type.GetType(array.[i]))]
-
-let internal toList (array:_ []) =
-    [for elem in array do
-        yield elem ]
-
-
-let rec goingThrough (methodName:string) (providedList:ProvidedTypeDefinition list) (aType:ProvidedTypeDefinition) (indexList:int list) 
+let rec goingThrough (methodNaming:string) (providedList:ProvidedTypeDefinition list) (aType:ProvidedTypeDefinition) (indexList:int list) 
                      (mLabel:Map<string,System.Type>) (mRole:Map<string,ProvidedTypeDefinition>) (fsmInstance:ScribbleProtocole.Root []) =
         match indexList with
         |[] -> // Last state: no next state possible
-                aType |> addMethod (<@@ printfn "finish" @@> |> createMethodType methodName [] typeof<unit> ) |> ignore
+                aType |> addMethod (<@@ printfn "finish" @@> |> createMethodType methodNaming [] typeof<unit> ) |> ignore
         |[b] -> let nextType = findProvidedType providedList fsmInstance.[b].NextState
+                let methodName = fsmInstance.[b].Type
                 let c = nextType.GetConstructors().[0]
                 let exprState = Expr.NewObject(c, [])
                 let event = fsmInstance.[b]
                 let fullName = event.Label
-                let message = serialize fullName
+                let message = serializeLabel fullName
                 let role = event.Partner
                 let listTypes = 
                     match methodName with
@@ -258,65 +285,30 @@ let rec goingThrough (methodName:string) (providedList:ProvidedTypeDefinition li
                         | _ -> []
                 let listParam = 
                     match methodName with
-                        |"send" | "receive" -> List.append [ProvidedParameter("Label",mLabel.[fullName]);ProvidedParameter("Role",mRole.[role])] listTypes
+                        |"send" | "receive" -> List.append [ProvidedParameter("Role",mRole.[role])] listTypes
                         | _  -> []
-                let listPayload = (toList event.Payload)   
+                let listPayload = (toList event.Payload)
+                let nameLabel = fullName.Replace("(","").Replace(")","") 
                 match methodName with
-                    |"send" -> let myMethod = ProvidedMethod(methodName,listParam,nextType,
+                    |"send" -> let myMethod = ProvidedMethod(methodName+nameLabel,listParam,nextType,
                                                                 IsStaticMethod = false,
-                                                                InvokeCode = fun args-> let buffers = args.Tail.Tail.Tail
+                                                                InvokeCode = fun args-> let buffers = args.Tail.Tail
                                                                                         let buf = serializeMessage fullName (toList event.Payload) buffers
-                                                                                        //let buf = serialize fullName
                                                                                         let exprAction = <@@ Regarder.sendMessage "agent" (%%buf:byte[]) role @@>
-                                                                                        //let exprAction = <@@ Regarder.sendMessage "agent" buf role @@> 
                                                                                         Expr.Sequential(exprAction,exprState) )
                                aType 
                                     |> addMethod myMethod
                                     |> ignore
-                    |"receive" ->  let myMethod = ProvidedMethod(methodName,listParam,nextType,
+                    |"receive" ->  let myMethod = ProvidedMethod(methodName+nameLabel,listParam,nextType,
                                                                     IsStaticMethod = false,
-                                                                    InvokeCode = fun args-> let buffers = args.Tail.Tail.Tail
+                                                                    InvokeCode = fun args-> let buffers = args.Tail.Tail
                                                                                             let listPayload = (toList event.Payload)
-                                                                                                  (*let mutable exp = []
-                                                                                                  for elem in buffers do
-                                                                                                    exp <- (Expr.Coerce(elem,typeof<obj>))::exp
-                                                                                                  let exprTest = Expr.NewArray(typeof<obj>,exp)*)
-                                                                                                  (*let exprAction = <@@ //Regarder.receiveMessage "agent" [message] role  listPayload
-                                                                                                                       printf "HEY MATTHIEU"
-                                                                                                                       Async.StartAsTask(Regarder.receiveMessage "agent" [message] role  listPayload)
-                                                                                                                       //printf "NO WAYYYYYYYYY"
-                                                                                                                       //deserializeTest listPayload// received //buffers //received listPayload |> ignore
-                                                                                                                       (*received.ContinueWith(fun (listTask:Task<byte[] list>) -> 
-                                                                                                                                                    deserializeTest buffers (listTask.Result) listPayload) *)
-                                                                                                                                                    (*if listTask.IsCompleted then
-                                                                                                                                                        listTask.Result |> List.iteri(fun i buf ->
-                                                                                                                                                                                    deserializeTest (%%buffers.[i]) buf listPayload.[i]
-                                                                                                                                                                               )
-                                                                                                                                                    else
-                                                                                                                                                        failwith "Heyyyyyyyyy"                
-                                                                                                                                                  )*)
-                                                                                                                                                  (*      deserializeTest      )
-                                                                                                                       let truc = Async.AwaitIAsyncResult(received) |> ignore
-                                                                                                                       
-                                                                                                                       async{
-                                                                                                                        let! result = Async.AwaitTask(received)*)
-                                                                                                                       
-                                                                                                                       //deserializeTest (%%exprTest:obj[]) received listPayload
-                                                                                                                       
-                                                                                                                       //let result = received //Async.RunSynchronously(received) 
-                                                                                                                       //result |> List.iter (printfn "ALLEZ PUTINNNNNNNNN : %A")  
-                                                                                                                       //received
-                                                                                                                       @@> // We can a TimeOut if we wait to long*)
-                                                                                                                       
-                                                                                                  //let exprDeserialize = deserializeMessage buffers exprAction listPayload
-                                                                                                  //let expr = Expr.Sequential(exprTest,exprAction)
                                                                                             let exprDes = deserialize buffers listPayload [message] role
                                                                                             Expr.Sequential(exprDes,exprState) )
-                                   let myMethodAsync =  ProvidedMethod((methodName+"Async"),listParam,nextType,
+                                   let myMethodAsync =  ProvidedMethod((methodName+nameLabel+"Async"),listParam,nextType,
                                                                         IsStaticMethod = false,
-                                                                        InvokeCode = fun args-> let buffers = args.Tail.Tail.Tail
+                                                                        InvokeCode = fun args-> let buffers = args.Tail.Tail
                                                                                                 let listPayload = (toList event.Payload)
-
                                                                                                 let exprDes = deserializeAsync buffers listPayload [message] role
                                                                                                 Expr.Sequential(exprDes,exprState) )
                                    aType 
@@ -324,14 +316,15 @@ let rec goingThrough (methodName:string) (providedList:ProvidedTypeDefinition li
                                     |> addMethod myMethodAsync
                                     |> ignore                 
                 
-                    | _ -> failwith " Mistake !!!!!!" 
+                    | _ -> failwith " Mistake from the CFSM : Type of the message is neither send nor receive !!!!!!" 
 
         |hd::tl -> let nextType = findProvidedType providedList fsmInstance.[hd].NextState
+                   let methodName = fsmInstance.[hd].Type
                    let c = nextType.GetConstructors().[0]
                    let exprState = Expr.NewObject(c, [])
                    let event = fsmInstance.[hd]
                    let fullName = event.Label
-                   let message = serialize(fullName)
+                   let message = serializeLabel(fullName)
                    let role = event.Partner
                    let listTypes = 
                     match methodName with
@@ -340,65 +333,30 @@ let rec goingThrough (methodName:string) (providedList:ProvidedTypeDefinition li
                         | _ -> []
                    let listParam = 
                     match methodName with
-                        |"send" | "receive" -> List.append [ProvidedParameter("Label",mLabel.[fullName]);ProvidedParameter("Role",mRole.[role])] listTypes
+                        |"send" | "receive" -> List.append [ProvidedParameter("Role",mRole.[role])] listTypes
                         | _  -> []
-                   
+                    
+                   let nameLabel = fullName.Replace("(","").Replace(")","")     
                    match methodName with
-                    |"send" -> let myMethod = ProvidedMethod(methodName,listParam,nextType,
+                    |"send" -> let myMethod = ProvidedMethod(methodName+nameLabel,listParam,nextType,
                                                                 IsStaticMethod = false,
-                                                                InvokeCode = fun args-> let buffers = args.Tail.Tail.Tail
+                                                                InvokeCode = fun args-> let buffers = args.Tail.Tail
                                                                                         let buf = serializeMessage fullName (toList event.Payload) buffers
-                                                                                        //let buf = serialize fullName
                                                                                         let exprAction = <@@ Regarder.sendMessage "agent" (%%buf:byte[]) role @@>
-                                                                                        //let exprAction = <@@ Regarder.sendMessage "agent" buf role @@> 
                                                                                         Expr.Sequential(exprAction,exprState) )
                                aType 
                                     |> addMethod myMethod
                                     |> ignore
-                    |"receive" ->  let myMethod = ProvidedMethod(methodName,listParam,nextType,
+                    |"receive" ->  let myMethod = ProvidedMethod(methodName+nameLabel,listParam,nextType,
                                                                     IsStaticMethod = false,
-                                                                    InvokeCode = fun args-> let buffers = args.Tail.Tail.Tail
+                                                                    InvokeCode = fun args-> let buffers = args.Tail.Tail
                                                                                             let listPayload = (toList event.Payload)
-                                                                                                  (*let mutable exp = []
-                                                                                                  for elem in buffers do
-                                                                                                    exp <- (Expr.Coerce(elem,typeof<obj>))::exp
-                                                                                                  let exprTest = Expr.NewArray(typeof<obj>,exp)*)
-                                                                                                  (*let exprAction = <@@ //Regarder.receiveMessage "agent" [message] role  listPayload
-                                                                                                                       printf "HEY MATTHIEU"
-                                                                                                                       Async.StartAsTask(Regarder.receiveMessage "agent" [message] role  listPayload)
-                                                                                                                       //printf "NO WAYYYYYYYYY"
-                                                                                                                       //deserializeTest listPayload// received //buffers //received listPayload |> ignore
-                                                                                                                       (*received.ContinueWith(fun (listTask:Task<byte[] list>) -> 
-                                                                                                                                                    deserializeTest buffers (listTask.Result) listPayload) *)
-                                                                                                                                                    (*if listTask.IsCompleted then
-                                                                                                                                                        listTask.Result |> List.iteri(fun i buf ->
-                                                                                                                                                                                    deserializeTest (%%buffers.[i]) buf listPayload.[i]
-                                                                                                                                                                               )
-                                                                                                                                                    else
-                                                                                                                                                        failwith "Heyyyyyyyyy"                
-                                                                                                                                                  )*)
-                                                                                                                                                  (*      deserializeTest      )
-                                                                                                                       let truc = Async.AwaitIAsyncResult(received) |> ignore
-                                                                                                                       
-                                                                                                                       async{
-                                                                                                                        let! result = Async.AwaitTask(received)*)
-                                                                                                                       
-                                                                                                                       //deserializeTest (%%exprTest:obj[]) received listPayload
-                                                                                                                       
-                                                                                                                       //let result = received //Async.RunSynchronously(received) 
-                                                                                                                       //result |> List.iter (printfn "ALLEZ PUTINNNNNNNNN : %A")  
-                                                                                                                       //received
-                                                                                                                       @@> // We can a TimeOut if we wait to long*)
-                                                                                                                       
-                                                                                                  //let exprDeserialize = deserializeMessage buffers exprAction listPayload
-                                                                                                  //let expr = Expr.Sequential(exprTest,exprAction)
                                                                                             let exprDes = deserialize buffers listPayload [message] role
                                                                                             Expr.Sequential(exprDes,exprState) )
-                                   let myMethodAsync =  ProvidedMethod((methodName+"Async"),listParam,nextType,
+                                   let myMethodAsync =  ProvidedMethod((methodName+nameLabel+"Async"),listParam,nextType,
                                                                         IsStaticMethod = false,
-                                                                        InvokeCode = fun args-> let buffers = args.Tail.Tail.Tail
+                                                                        InvokeCode = fun args-> let buffers = args.Tail.Tail
                                                                                                 let listPayload = (toList event.Payload)
-
                                                                                                 let exprDes = deserializeAsync buffers listPayload [message] role
                                                                                                 Expr.Sequential(exprDes,exprState) )
                                    aType 
@@ -407,56 +365,6 @@ let rec goingThrough (methodName:string) (providedList:ProvidedTypeDefinition li
                                     |> ignore                 
                 
                     | _ -> failwith " Mistake !!!!!!"                      
-                   (*let myMethod = ProvidedMethod(methodName,listParam,nextType,
-                                                        IsStaticMethod = false,
-                                                        InvokeCode = fun args-> let buffers = args.Tail.Tail.Tail
-                                                                                match methodName with
-                                                                                    |"send" -> let buf = serializeMessage fullName (toList event.Payload) buffers
-                                                                                               //let buf = serialize fullName
-                                                                                               let exprAction = <@@ Regarder.sendMessage "agent" (%%buf:byte[]) role @@>
-                                                                                               //let exprAction = <@@ Regarder.sendMessage "agent" buf role @@> 
-                                                                                               Expr.Sequential(exprAction,exprState)
-                                                                                    |"receive" -> let listPayload = (toList event.Payload)
-                                                                                                  (*let mutable exp = []
-                                                                                                  for elem in buffers do
-                                                                                                    exp <- (Expr.Coerce(elem,typeof<obj>))::exp
-                                                                                                  let exprTest = Expr.NewArray(typeof<obj>,exp)*)
-                                                                                                  (*let exprAction = <@@ //Regarder.receiveMessage "agent" [message] role  listPayload
-                                                                                                                       printf "HEY MATTHIEU"
-                                                                                                                       Async.StartAsTask(Regarder.receiveMessage "agent" [message] role  listPayload)
-                                                                                                                       //printf "NO WAYYYYYYYYY"
-                                                                                                                       //deserializeTest listPayload// received //buffers //received listPayload |> ignore
-                                                                                                                       (*received.ContinueWith(fun (listTask:Task<byte[] list>) -> 
-                                                                                                                                                    deserializeTest buffers (listTask.Result) listPayload) *)
-                                                                                                                                                    (*if listTask.IsCompleted then
-                                                                                                                                                        listTask.Result |> List.iteri(fun i buf ->
-                                                                                                                                                                                    deserializeTest (%%buffers.[i]) buf listPayload.[i]
-                                                                                                                                                                               )
-                                                                                                                                                    else
-                                                                                                                                                        failwith "Heyyyyyyyyy"                
-                                                                                                                                                  )*)
-                                                                                                                                                  (*      deserializeTest      )
-                                                                                                                       let truc = Async.AwaitIAsyncResult(received) |> ignore
-                                                                                                                       
-                                                                                                                       async{
-                                                                                                                        let! result = Async.AwaitTask(received)*)
-                                                                                                                       
-                                                                                                                       //deserializeTest (%%exprTest:obj[]) received listPayload
-                                                                                                                       
-                                                                                                                       //let result = received //Async.RunSynchronously(received) 
-                                                                                                                       //result |> List.iter (printfn "ALLEZ PUTINNNNNNNNN : %A")  
-                                                                                                                       //received
-                                                                                                                       @@> // We can a TimeOut if we wait to long*)
-                                                                                                                       
-                                                                                                  //let exprDeserialize = deserializeMessage buffers exprAction listPayload
-                                                                                                  //let expr = Expr.Sequential(exprTest,exprAction)
-                                                                                                  let exprDes = deserializeTest buffers listPayload [message] role
-                                                                                                  Expr.Sequential(exprDes,exprState)
-                                                                                    |_ -> <@@ printfn "Error" @@> )
-       
-                   aType 
-                        |> addMethod myMethod
-                        |> ignore                *)
                    goingThrough methodName providedList aType tl mLabel mRole fsmInstance 
 
 
@@ -464,7 +372,16 @@ let internal getAllChoiceLabels (indexList : int list) (fsmInstance:ScribbleProt
     let rec aux list acc =
         match list with
             |[] -> acc
-            |hd::tl -> let labelBytes = fsmInstance.[hd].Label |> serialize
+            |hd::tl -> let labelBytes = fsmInstance.[hd].Label |> serializeLabel
+                       aux tl (labelBytes::acc) 
+    in aux indexList []
+
+
+let internal getAllChoiceLabelString (indexList : int list) (fsmInstance:ScribbleProtocole.Root []) =
+    let rec aux list acc =
+        match list with
+            |[] -> acc
+            |hd::tl -> let labelBytes = fsmInstance.[hd].Label 
                        aux tl (labelBytes::acc) 
     in aux indexList []
 
@@ -492,16 +409,22 @@ let rec addProperties (providedListStatic:ProvidedTypeDefinition list) (provided
                                      let myMethod = ProvidedMethod("branch",[],labelType,
                                                                                     IsStaticMethod = false,
                                                                                     InvokeCode = fun args-> let listPayload = (toList event.Payload)
-                                                                                                            let exprAction = <@@ Regarder.receiveMessage "agent" listExpectedMessages role listPayload @@>
-                                                                                                            let label = mLabel.["GoodMornin()"] // Change to be the correct one
-                                                                                                            let ctor = label.GetConstructors().[0]
-                                                                                                            let exprReturn = Expr.NewObject(ctor,[])
-                                                                                                            Expr.Sequential(exprAction,exprReturn) )
-
+                                                                                                            <@@ let result = Regarder.receiveMessage "agent" listExpectedMessages role listPayload 
+                                                                                                                let unicode = new System.Text.UnicodeEncoding() 
+                                                                                                                let labelRead = unicode.GetString(result.[0]) 
+                                                                                                                let label = Regarder.getLabelType labelRead
+                                                                                                                let ctor = label.GetConstructors().[0]
+                                                                                                                ctor.Invoke([||]) @@> )                                                                                                            
+                                     let sb = new System.Text.StringBuilder()
+                                     sb.Append("<summary> When branching here, you will have to type pattern match on the following types :") |> ignore
+                                     (indexList |> getAllChoiceLabelString <| fsmInstance)
+                                                                |> List.iter(fun message -> sb.Append ("<para> - " + message + "</para>" ) |> ignore ) |> ignore
+                                     sb.Append("</summary>") |> ignore
+                                     let doc = sb.ToString()
+                                     myMethod.AddXmlDoc(doc)
                                      aType |> addMethod myMethod |> ignore
                         |"finish" ->  goingThrough methodName providedListStatic aType indexList mLabel mRole fsmInstance 
-                        | _ -> printfn "Not correct"
-                    aType |> addProperty (<@@ "essaye Bateau" @@> |> createPropertyType "MyProperty" typeof<string> ) |> ignore
+                        | _ -> failwith "The only method name that should be available should be send/receive/choice/finish"
         |hd::tl ->  match methodName with
                         |"send" -> goingThrough methodName providedListStatic hd indexList mLabel mRole fsmInstance 
                         |"receive" -> goingThrough methodName providedListStatic hd indexList mLabel mRole fsmInstance 
@@ -514,14 +437,22 @@ let rec addProperties (providedListStatic:ProvidedTypeDefinition list) (provided
                                      let myMethod = ProvidedMethod("branch",[],labelType,
                                                                                     IsStaticMethod = false,
                                                                                     InvokeCode = fun args-> let listPayload = (toList event.Payload)
-                                                                                                            let exprAction = <@@ Regarder.receiveMessage "agent" listExpectedMessages role listPayload  @@> // TO CHANGE !!!!!!!!!!!!!!!!
-                                                                                                            let label = mLabel.["GoodMornin()"]
-                                                                                                            let ctor = label.GetConstructors().[0]
-                                                                                                            let exprReturn = Expr.NewObject(ctor,[])
-                                                                                                            Expr.Sequential(exprAction,exprReturn) )
+                                                                                                            <@@ let result = Regarder.receiveMessage "agent" listExpectedMessages role listPayload 
+                                                                                                                let unicode = new System.Text.UnicodeEncoding() 
+                                                                                                                let labelRead = unicode.GetString(result.[0]) 
+                                                                                                                let label = Regarder.getLabelType labelRead
+                                                                                                                let ctor = label.GetConstructors().[0]
+                                                                                                                ctor.Invoke([||]) @@> )                                                                                       
+                                     let sb = new System.Text.StringBuilder()
+                                     sb.Append("<summary> When branching here, you will have to type pattern match on the following types :") |> ignore
+                                     (indexList |> getAllChoiceLabelString <| fsmInstance)
+                                                                |> List.iter(fun message -> sb.Append ("<para> - " + message + "</para>" ) |> ignore ) |> ignore
+                                     sb.Append("</summary>") |> ignore
+                                     let doc = sb.ToString()
+                                     myMethod.AddXmlDoc(doc)
                                      hd |> addMethod myMethod |> ignore
                         |"finish" -> goingThrough methodName providedListStatic hd indexList mLabel mRole fsmInstance 
-                        | _ -> printfn "Not correct"    
+                        | _ -> failwith "The only method name that should be available should be send/receive/choice/finish"
                     hd |> addProperty (<@@ "Test" @@> |> createPropertyType "MyProperty" typeof<string> ) |> ignore
                     addProperties providedListStatic tl (stateList.Tail) mLabel mRole fsmInstance 
 
@@ -545,4 +476,4 @@ let internal makeRoleList (fsmInstance:ScribbleProtocole.Root []) =
      for event in fsmInstance do
         if not(setSeen |> contains <| event.Partner) then
             setSeen <- setSeen.Add(event.Partner)
-            yield event.Partner]
+            yield event.Partner] 
