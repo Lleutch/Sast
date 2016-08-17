@@ -6,10 +6,11 @@ open System.Net.Sockets
 open System.IO
 open System.Net
 open System.Text
-
 open System
 // ScribbleProvider specific namespaces and modules
 open GenerativeTypeProviderExample.DomainModel
+open System.Collections.Generic
+
 
 exception TooManyTriesError of string
 
@@ -44,12 +45,7 @@ type AgentSender(ipAddress,port) =
                                         if not(tcpClient.Connected) then
                                             //let cts = new System.Threading.CancellationTokenSource()
                                             timeout |> waitSynchronously |> Async.RunSynchronously
-                                            System.Console.WriteLine("Toujours pas connecte !!!!...")
-                                            (*async{
-                                                System.Console.WriteLine("TimeOut...")
-                                                do! Async.Sleep(timeout*1000) // Probably better to use return! instead ATTENTIONNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN
-                                                System.Console.WriteLine("TimeOut Fin...")
-                                            } |> ignore *)                                            
+                                            System.Console.WriteLine("Toujours pas connecte !!!!...")                                        
                                             aux (timeout*2) (count+1)
                                         else
                                             System.Console.WriteLine("CONNECTED IT WORKS")
@@ -334,6 +330,42 @@ type AgentRouter(agentMap:Map<string,AgentSender>,agentReceiving:AgentReceiver) 
         payloadChoice
         
 
+
+
+
+// Functions that generate the agents.
+
+let isIn (list:string list) (localRole:string) =
+    list |> List.exists (fun x -> x=localRole) 
+
+let private createReceiver (ipAddress:string) (port:int)=
+    new AgentReceiver(ipAddress,port)
+
+let createMapSender (partnersInfo: IList<ConfigFile.Partners_Item_Type>) (listRoles:string list) =
+    let mutable mapping = Map.empty<string,AgentSender>
+    for partner in partnersInfo do
+        match (listRoles |> isIn <| partner.Name) with
+            | false -> failwith (sprintf "The following role : %s from the config file doesnt belong to the protocol: 
+                                 Check If you have spelled it correctly, be aware, the role is case-sensitive"  (partner.Name) )
+            | true -> mapping <- mapping.Add(partner.Name, new AgentSender(partner.IP,partner.Port))
+    mapping
+
+let createRouter (configInfos:ConfigFile) (listRoles:string list) =
+    let lengthList = listRoles.Length
+    let configSize = configInfos.Partners.Count + 1
+    match (configSize = lengthList) with
+        | false -> failwith "you don't have the correct number of roles in the YAML Configuration file"
+        | true ->
+            match (listRoles |> isIn <| configInfos.LocalRole.Name) with
+                |false -> failwith (sprintf "The following local role : %s from the config file doesn't belong to the protocol: 
+                                    Check If you have spelled it correctly, be aware, the role is case-sensitive"  (configInfos.LocalRole.Name) )
+                |true -> let mapAgentSender = configInfos.Partners |> createMapSender <| listRoles
+                         let agentReceiver = configInfos.LocalRole.IP |> createReceiver <| configInfos.LocalRole.Port
+                         new AgentRouter(mapAgentSender,agentReceiver)
+
+
+
+(*
 let private createMapAgentSenders (infos:Map<string,string*int>) =
     let mutable mapping = Map.empty<string,AgentSender>
     for partner in infos do
@@ -399,4 +431,4 @@ let internal createAgentRouter (local:bool) (partnersInfos:Map<string,string*int
         else
             let agentSenders = createMapAgentSenders partnersInfos
             let agentReceiver = createAgentReceiver localRoleInfos
-            new AgentRouter(agentSenders,agentReceiver)    
+            new AgentRouter(agentSenders,agentReceiver)    *)

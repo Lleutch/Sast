@@ -4,6 +4,8 @@ open System.Threading
 open Microsoft.FSharp.Quotations
 open ProviderImplementation.ProvidedTypes 
 open System.IO
+open FSharp.Configuration
+
 // Scribble Type 
 type ScribbleProtocole = FSharp.Data.JsonProvider<""" [ { "currentState":0 , "localRole":"StringLocalRole" , "partner":"StringPartner" , "label":"StringLabel" , "payload":["StringTypes"] , "type":"EventType" , "nextState":0  } ] """>
 
@@ -35,3 +37,20 @@ type Message =
 let internal ns = "GenerativeTypeProviderExample.Provided"
 let asm = ProvidedAssembly(Path.ChangeExtension(Path.GetTempFileName(), ".dll"))
 let baseType = typeof<obj>
+
+
+
+// Configuration File YAML TP
+[<Literal>]
+let metaYaml = "Partners:
+    - Name: You
+      IP: 127.0.0.1
+      Port: 5001
+
+LocalRole:
+  Name: Me
+  IP: 127.0.0.1
+  Port: 5000 "
+
+type ConfigFile = YamlConfig<YamlText=metaYaml>
+let config = ConfigFile()

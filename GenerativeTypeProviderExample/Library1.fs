@@ -7,7 +7,7 @@ open ProviderImplementation.ProvidedTypes // open the providedtypes.fs file
 open System.Reflection // necessary if we want to use the f# assembly
 open System.IO
 open FSharp.Data
-
+open FSharp.Configuration
 // ScribbleProvider specific namespaces and modules
 open GenerativeTypeProviderExample.TypeGeneration
 open GenerativeTypeProviderExample.DomainModel
@@ -21,7 +21,6 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
 
     let tmpAsm = Assembly.LoadFrom(config.RuntimeAssembly)
 
-
     let generateTypes (fsm:string) (name:string) (parameters:obj[]) = 
         let protocol = ScribbleProtocole.Parse(fsm)
         let triple= stateSet protocol
@@ -34,12 +33,19 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
         let list1 = snd(tupleLabel)
         let list2 = snd(tupleRole)
 
-        let local = parameters.[0]  :?> bool
+        (*let local = parameters.[0]  :?> bool
         let partnersInfos = parameters.[1]  :?> Map<string,string*int>
-        let localRoleInfos = parameters.[2]  :?> string*int
+        let localRoleInfos = parameters.[2]  :?> string*int *)
 
-        Regarder.ajouterLabel (fst (tupleLabel))
-        let agentRouter = createAgentRouter local partnersInfos localRoleInfos listOfRoles protocol.[0].LocalRole
+        let configFilePath = parameters.[0]  :?> string
+
+        let naming = __SOURCE_DIRECTORY__ + "\\" + configFilePath
+        DomainModel.config.Load(naming)
+
+
+        (tupleLabel |> fst) |> Regarder.ajouterLabel
+        let agentRouter = (DomainModel.config) |> createRouter <| listOfRoles 
+        //let agentRouter = createAgentRouter local partnersInfos localRoleInfos listOfRoles protocol.[0].LocalRole
         Regarder.ajouter "agent" agentRouter
 
         addProperties listTypes listTypes (Set.toList stateSet) (fst tupleLabel) (fst tupleRole) protocol
@@ -107,13 +113,15 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
     let providedTypeFile = TypeGeneration.createProvidedType tmpAsm "TypeProviderFile"
     
     let parametersFSM = [ProvidedStaticParameter("Protocol",typeof<string>);
-                      ProvidedStaticParameter("Local",typeof<bool>,parameterDefaultValue = true);
+                         ProvidedStaticParameter("Config",typeof<string>);]
+                      (*ProvidedStaticParameter("Local",typeof<bool>,parameterDefaultValue = true);
                       ProvidedStaticParameter("PartnersInfos",typeof<Map<string,string*int>>,parameterDefaultValue = Map.empty<string,string*int>);
-                      ProvidedStaticParameter("LocalRoleInfos",typeof<string*int>,parameterDefaultValue = ("127.0.0.1",-1));]
+                      ProvidedStaticParameter("LocalRoleInfos",typeof<string*int>,parameterDefaultValue = ("127.0.0.1",-1));]*)
     
     let parametersFile= [ ProvidedStaticParameter("File Uri",typeof<string>);
                           ProvidedStaticParameter("Global Protocol",typeof<string>);
-                          ProvidedStaticParameter("Role",typeof<string>);]
+                          ProvidedStaticParameter("Role",typeof<string>);
+                          ProvidedStaticParameter("Config",typeof<string>);]
 
     do 
         providedTypeFSM.DefineStaticParameters(parametersFSM,createTypeWithFSM)

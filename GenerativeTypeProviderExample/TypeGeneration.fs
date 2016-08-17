@@ -452,7 +452,8 @@ let rec addProperties (providedListStatic:ProvidedTypeDefinition list) (provided
                                      myMethod.AddXmlDoc(doc)
                                      hd |> addMethod myMethod |> ignore
                         |"finish" -> goingThrough methodName providedListStatic hd indexList mLabel mRole fsmInstance 
-                        | _ -> failwith "The only method name that should be available should be send/receive/choice/finish"
+                        | _ -> failwith "The only type of event from the CFSM that should be available is one of the 
+                                         following : send/receive/choice"
                     hd |> addProperty (<@@ "Test" @@> |> createPropertyType "MyProperty" typeof<string> ) |> ignore
                     addProperties providedListStatic tl (stateList.Tail) mLabel mRole fsmInstance 
 
