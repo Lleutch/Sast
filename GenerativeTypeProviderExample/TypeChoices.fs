@@ -3,82 +3,82 @@
 [<Literal>]
 let NUMBER_OF_CHOICES = 40
 
-type Choice1() = class end
+type Choice1 = interface end
 
-type Choice2() = class end
+type Choice2 = interface end
 
-type Choice3() = class end
+type Choice3 = interface end
 
-type Choice4() = class end
+type Choice4 = interface end
 
-type Choice5() = class end
+type Choice5 = interface end
 
-type Choice6() = class end
+type Choice6 = interface end
 
-type Choice7() = class end
+type Choice7 = interface end
 
-type Choice8() = class end
+type Choice8 = interface end
 
-type Choice9() = class end
+type Choice9 = interface end
 
-type Choice10() = class end
+type Choice10 = interface end
 
-type Choice11() = class end
+type Choice11 = interface end
 
-type Choice12() = class end
+type Choice12 = interface end
 
-type Choice13() = class end
+type Choice13 = interface end
 
-type Choice14() = class end
+type Choice14 = interface end
 
-type Choice15() = class end
+type Choice15 = interface end
 
-type Choice16() = class end
+type Choice16 = interface end
 
-type Choice17() = class end
+type Choice17 = interface end
 
-type Choice18() = class end
+type Choice18 = interface end
 
-type Choice19() = class end
+type Choice19 = interface end
 
-type Choice20() = class end
+type Choice20 = interface end
 
-type Choice21() = class end
+type Choice21 = interface end
 
-type Choice22() = class end
+type Choice22 = interface end
 
-type Choice23() = class end
+type Choice23 = interface end
 
-type Choice24() = class end
+type Choice24 = interface end
 
-type Choice25() = class end
+type Choice25 = interface end
 
-type Choice26() = class end
+type Choice26 = interface end
 
-type Choice27() = class end
+type Choice27 = interface end
 
-type Choice28() = class end
+type Choice28 = interface end
 
-type Choice29() = class end
+type Choice29 = interface end
 
-type Choice30() = class end
+type Choice30 = interface end
 
-type Choice31() = class end
+type Choice31 = interface end
 
-type Choice32() = class end
+type Choice32 = interface end
 
-type Choice33() = class end
+type Choice33 = interface end
 
-type Choice34() = class end
+type Choice34 = interface end
 
-type Choice35() = class end
+type Choice35 = interface end
 
-type Choice36() = class end
+type Choice36 = interface end
 
-type Choice37() = class end
+type Choice37 = interface end
 
-type Choice38() = class end
+type Choice38 = interface end
 
-type Choice39() = class end
+type Choice39 = interface end
 
-type Choice40() = class end
+type Choice40 = interface end

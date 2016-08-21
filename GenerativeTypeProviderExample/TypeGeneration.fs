@@ -34,9 +34,9 @@ let internal createCstor param expression =
 
 
 // ADDING TYPES, NESTED TYPES, METHODS, PROPERTIES, CONSTRUCTORS TO THE ASSEMBLY AND AS MEMBERS OF THE TYPE PROVIDER
-let internal addProvidedTypeToAssembly (providedType:ProvidedTypeDefinition)=
+(*let internal addProvidedTypeToAssembly (providedType:ProvidedTypeDefinition)=
     asm.AddTypes([providedType])
-    providedType
+    providedType*)
 
 let internal addIncludedTypeToProvidedType nestedTypeToAdd (providedType:ProvidedTypeDefinition) =
     providedType.AddMembers(nestedTypeToAdd)
@@ -91,13 +91,31 @@ let internal findSameNext nextState  (fsmInstance:ScribbleProtocole.Root [])  =
         inc <- inc+1
     list
 
-let rec alreadySeen (liste:string list) (s:string) =
+let rec alreadySeenLabel (liste:(string*int) list) (elem:string*int) =
     match liste with
         | [] -> false
-        | hd::tl -> if hd.Equals(s) then
+        | (hdS,hdI)::tl ->  if hdS.Equals(elem |> fst) && hdI.Equals(elem |> snd) then
+                                true
+                            else
+                                alreadySeenLabel tl elem
+
+let rec alreadySeenOnlyLabel (liste:(string*int) list) (elem:string) =
+    match liste with
+        | [] -> false
+        | (hdS,hdI)::tl ->  if hdS.Equals(elem) then
+                                true
+                            else
+                                alreadySeenOnlyLabel tl elem
+
+
+let rec alreadySeenRole (liste:string list) (elem:string) =
+    match liste with
+        | [] -> false
+        | hd::tl -> if hd.Equals(elem) then
                         true
                     else
-                        alreadySeen tl s
+                        alreadySeenRole tl elem
+
 
 let internal findSameCurrent currentState  (fsmInstance:ScribbleProtocole.Root [])  =
     let mutable list = []
@@ -162,7 +180,7 @@ let internal makeRoleTypes (fsmInstance:ScribbleProtocole.Root []) =
     listeType <- t::listeType
     let mutable mapping = Map.empty<_,ProvidedTypeDefinition>.Add(fsmInstance.[0].LocalRole,t)
     for event in fsmInstance do
-        if not(alreadySeen liste event.Partner) then
+        if not(alreadySeenRole liste event.Partner) then
             let ctor = ( <@@ () @@> |> createCstor [])
             let t = event.Partner 
                                     |> createProvidedIncludedType
@@ -177,13 +195,13 @@ let internal makeRoleTypes (fsmInstance:ScribbleProtocole.Root []) =
 
 
 
-let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedList: ProvidedTypeDefinition list) = 
+let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedList: ProvidedTypeDefinition list) (mRole:Map<string,ProvidedTypeDefinition>) = 
     let mutable listeLabelSeen = []
     let mutable listeType = []
     let mutable choiceIter = 1
     let mutable mapping = Map.empty<_,System.Type>
     for event in fsmInstance do
-        if (event.Type.Contains("choice") && not(alreadySeen listeLabelSeen event.Label)) then
+        if (event.Type.Contains("choice") && not(alreadySeenLabel listeLabelSeen (event.Label,event.CurrentState))) then
             match choiceIter with
                 |i when i <= TypeChoices.NUMBER_OF_CHOICES ->   let assem = typeof<TypeChoices.Choice1>.Assembly
                                                                 let typeCtor = assem.GetType("GenerativeTypeProviderExample.TypeChoices+Choice" + i.ToString())
@@ -195,63 +213,77 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
                                                                 let rec aux (liste:int list) =
                                                                     match liste with
                                                                         |[] -> ()
-                                                                        |[aChoice] -> if not(alreadySeen listeLabelSeen fsmInstance.[aChoice].Label) then
-                                                                                        let currEvent = fsmInstance.[aChoice] 
-                                                                                        let name = currEvent.Label.Replace("(","").Replace(")","") 
+                                                                        |[aChoice] -> let currEvent = fsmInstance.[aChoice]
+                                                                                      let name = currEvent.Label.Replace("(","").Replace(")","") 
+                                                                                      let mutable t = name |> createProvidedIncludedType
+                                                                                                           |> addCstor ([] |> createCstor <|  <@@ () @@>)
+                                                                                      if (alreadySeenOnlyLabel listeLabelSeen currEvent.Label) then
+                                                                                        t <- mapping.[currEvent.Label] :?> ProvidedTypeDefinition
+                                                                                        //t
+                                                                                      //if not(alreadySeenLabel listeLabelSeen (currEvent.Label,currEvent.CurrentState)) then
+                                                                                        //let name = currEvent.Label.Replace("(","").Replace(")","") 
                                                                                         
-                                                                                        let listParam = createProvidedParameters event
-                                                                                        let listPayload = (toList event.Payload)   
-                                                                                        let myMethod = ProvidedMethod("receive",listParam,nextType,
-                                                                                                                        IsStaticMethod = false,
-                                                                                                                        InvokeCode = fun args-> let buffers = args.Tail.Tail
-                                                                                                                                                let listPayload = (toList event.Payload)
-                                                                                                                                                let exprUnit = <@@ () @@>
-                                                                                                                                                let exprDes = deserializeChoice buffers listPayload
-                                                                                                                                                Expr.Sequential(exprDes,exprUnit) )
+                                                                                      let listTypes = createProvidedParameters event
+                                                                                      let listParam = List.append [ProvidedParameter("Role_State_" + event.NextState.ToString(),mRole.[event.Partner])] listTypes
+                                                                                      let listPayload = (toList event.Payload)   
+                                                                                      let myMethod = ProvidedMethod("receive",listParam,nextType,
+                                                                                                                      IsStaticMethod = false,
+                                                                                                                      InvokeCode = fun args-> let buffers = args.Tail.Tail
+                                                                                                                                              let listPayload = (toList event.Payload)
+                                                                                                                                              let exprUnit = <@@ () @@>
+                                                                                                                                              let exprDes = deserializeChoice buffers listPayload
+                                                                                                                                              Expr.Sequential(exprDes,exprUnit) )
                                                                                                                                                 
-                                                                                        let t = name |> createProvidedIncludedTypeChoice typeCtor
-                                                                                                     |> addCstor ([] |> createCstor <|  <@@ () @@>)
-                                                                                                     |> addMethod (myMethod)
+                                                                                      t <- t |> addMethod (myMethod)
 
-                                                                                        t.SetAttributes(TypeAttributes.Public ||| TypeAttributes.Class)
-                                                                                        t.HideObjectMethods <- true
-                                                                                        mapping <- mapping.Add(fsmInstance.[aChoice].Label,t)
-                                                                                        listeLabelSeen <- fsmInstance.[aChoice].Label::listeLabelSeen
-                                                                                        listeType <- (t :> System.Type )::listeType  
+                                                                                      t.SetAttributes(TypeAttributes.Public ||| TypeAttributes.Class)
+                                                                                      t.HideObjectMethods <- true
+                                                                                      t.AddInterfaceImplementation typeCtor
+                                                                                      if not (alreadySeenOnlyLabel listeLabelSeen currEvent.Label) then 
+                                                                                          mapping <- mapping.Add(currEvent.Label,t)
+                                                                                          listeType <- (t :> System.Type )::listeType       
+                                                                                      listeLabelSeen <- (currEvent.Label,currEvent.CurrentState)::listeLabelSeen
+                                                                                                     
+                                                                        |hd::tl ->  let currEvent = fsmInstance.[hd] 
+                                                                                    let name = currEvent.Label.Replace("(","").Replace(")","")
+                                                                                    let mutable t = name |> createProvidedIncludedType
+                                                                                                         |> addCstor ([] |> createCstor <|  <@@ () @@>) 
+                                                                                    if (alreadySeenOnlyLabel listeLabelSeen currEvent.Label) then
+                                                                                        t <- mapping.[currEvent.Label] :?> ProvidedTypeDefinition    
+                                                                                    //if not(alreadySeenLabel listeLabelSeen (currEvent.Label,currEvent.CurrentState)) then
+                                                                                        //let name = currEvent.Label.Replace("(","").Replace(")","") 
                                                                                         
-                                                                        |hd::tl -> if not(alreadySeen listeLabelSeen fsmInstance.[hd].Label) then
-                                                                                        let currEvent = fsmInstance.[hd] 
-                                                                                        let name = currEvent.Label.Replace("(","").Replace(")","") 
-                                                                                        
-                                                                                        let listParam = createProvidedParameters event
-                                                                                        let listPayload = (toList event.Payload)   
-                                                                                        let myMethod = ProvidedMethod("receive",listParam,nextType,
-                                                                                                                        IsStaticMethod = false,
-                                                                                                                        InvokeCode = fun args-> let buffers = args.Tail.Tail
-                                                                                                                                                let listPayload = (toList event.Payload)
-                                                                                                                                                let exprUnit = <@@ () @@>
-                                                                                                                                                let exprDes = deserializeChoice buffers listPayload
-                                                                                                                                                Expr.Sequential(exprDes,exprUnit) )
+                                                                                    let listTypes = createProvidedParameters event
+                                                                                    let listParam = List.append [ProvidedParameter("Role_State_" + event.NextState.ToString(),mRole.[event.Partner])] listTypes
+                                                                                    let listPayload = (toList event.Payload)   
+                                                                                    let myMethod = ProvidedMethod("receive",listParam,nextType,
+                                                                                                                    IsStaticMethod = false,
+                                                                                                                    InvokeCode = fun args-> let buffers = args.Tail.Tail
+                                                                                                                                            let listPayload = (toList event.Payload)
+                                                                                                                                            let exprUnit = <@@ () @@>
+                                                                                                                                            let exprDes = deserializeChoice buffers listPayload
+                                                                                                                                            Expr.Sequential(exprDes,exprUnit) )
 
-                                                                                        let t= name |> createProvidedIncludedTypeChoice typeCtor
-                                                                                                    |> addCstor ([] |> createCstor <|  <@@ () @@>)
-                                                                                                    |> addMethod (myMethod)
-                                                                                        t.SetAttributes(TypeAttributes.Public ||| TypeAttributes.Class)
-                                                                                       
-                                                                                        mapping <- mapping.Add(fsmInstance.[hd].Label,t)
-                                                                                        listeLabelSeen <- fsmInstance.[hd].Label::listeLabelSeen
+                                                                                    t <- t |> addMethod (myMethod)
+
+                                                                                    t.SetAttributes(TypeAttributes.Public ||| TypeAttributes.Class)
+                                                                                    t.HideObjectMethods <- true
+                                                                                    t.AddInterfaceImplementation typeCtor
+                                                                                    if not(alreadySeenOnlyLabel listeLabelSeen currEvent.Label) then
+                                                                                        mapping <- mapping.Add(currEvent.Label,t)
                                                                                         listeType <- (t :> System.Type )::listeType
+                                                                                    listeLabelSeen <- (currEvent.Label,currEvent.CurrentState)::listeLabelSeen
                                                                                         
-                                                                                        aux tl 
+                                                                                    aux tl 
                                                                 in aux listIndexChoice 
                 | _ -> failwith ("number of choices > " + TypeChoices .NUMBER_OF_CHOICES.ToString() + " : This protocol won't be taken in account by this TP. ") 
 
-        else if not(alreadySeen listeLabelSeen event.Label) then
+        else if not(alreadySeenOnlyLabel listeLabelSeen event.Label) then
             let name = event.Label.Replace("(","").Replace(")","") 
             let t = name |> createProvidedIncludedType
                          |> addCstor (<@@ name :> obj @@> |> createCstor [])
             mapping <- mapping.Add(event.Label,t)
-            listeLabelSeen <- event.Label::listeLabelSeen
+            listeLabelSeen <- (event.Label,event.CurrentState)::listeLabelSeen
             listeType <- ( t :> System.Type )::listeType
     (mapping,listeType)
 
@@ -364,7 +396,7 @@ let rec goingThrough (methodNaming:string) (providedList:ProvidedTypeDefinition 
                                     |> addMethod myMethodAsync
                                     |> ignore                 
                 
-                    | _ -> failwith " Mistake !!!!!!"                      
+                    | _ -> failwith (sprintf " Mistake you have a method named : %s !!!!!!" methodName  )                    
                    goingThrough methodName providedList aType tl mLabel mRole fsmInstance 
 
 
@@ -401,8 +433,8 @@ let rec addProperties (providedListStatic:ProvidedTypeDefinition list) (provided
                         |"send" ->  goingThrough methodName providedListStatic aType indexList mLabel mRole fsmInstance
                         |"receive" -> goingThrough methodName providedListStatic aType indexList mLabel mRole fsmInstance 
                         |"choice" -> let labelType = mLabel.["Choice" + string currentState]
-                                     let c = labelType.GetConstructors().[0]
-                                     let exprLabel = Expr.NewObject(c,[])
+                                     //let c = labelType.GetConstructors().[0]
+                                     //let exprLabel = Expr.NewObject(c,[])
                                      let listExpectedMessages = getAllChoiceLabels indexList fsmInstance
                                      let event = fsmInstance.[indexOfState]
                                      let role = event.Partner
@@ -429,8 +461,8 @@ let rec addProperties (providedListStatic:ProvidedTypeDefinition list) (provided
                         |"send" -> goingThrough methodName providedListStatic hd indexList mLabel mRole fsmInstance 
                         |"receive" -> goingThrough methodName providedListStatic hd indexList mLabel mRole fsmInstance 
                         |"choice" -> let labelType = mLabel.["Choice"+ string currentState]
-                                     let c = labelType.GetConstructors().[0]
-                                     let exprLabel = Expr.NewObject(c,[])
+                                     //let c = labelType.GetConstructors().[0]
+                                     //let exprLabel = Expr.NewObject(c,[])
                                      let listExpectedMessages = getAllChoiceLabels indexList fsmInstance
                                      let event = fsmInstance.[indexOfState]
                                      let role = event.Partner

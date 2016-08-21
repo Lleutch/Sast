@@ -11,6 +11,7 @@ type ScribbleProtocole = FSharp.Data.JsonProvider<""" [ { "currentState":0 , "lo
 
 type ScribbleAPI = FSharp.Data.JsonProvider<""" { "code":"Code", "proto":"global protocol", "role":"local role" } """>
 
+
 type ISetResult =
     abstract member SetValue : obj -> unit
 
@@ -35,7 +36,7 @@ type Message =
 
 // TYPE PROVIDER'S ASSEMBLY (for generative type provider) + NAMESPACE + BASETYPE 
 let internal ns = "GenerativeTypeProviderExample.Provided"
-let asm = ProvidedAssembly(Path.ChangeExtension(Path.GetTempFileName(), ".dll"))
+//let asm = ProvidedAssembly(Path.ChangeExtension(Path.GetTempFileName(), ".dll"))
 let baseType = typeof<obj>
 
 

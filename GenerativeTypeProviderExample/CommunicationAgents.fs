@@ -19,13 +19,19 @@ let internal readMessage (s : Stream) =
     let size = dis.ReadInt32()
     dis.ReadBytes(size)
 
+let internal readPayload (s : Stream) (payloadType : string) =
+    let dis = new BinaryReader(s)
+    let sizeExpected = System.Runtime.InteropServices.Marshal.SizeOf(System.Type.GetType(payloadType))
+    let sizeReal = dis.ReadInt32()
+    match (sizeExpected = sizeReal) with
+        | false -> failwith (sprintf "Expected a payload of type %s but received something different" payloadType) 
+        | true -> dis.ReadBytes(sizeReal)
+
 type AgentSender(ipAddress,port) =
 
     let waitSynchronously timeout =
         async{
-            System.Console.WriteLine("TimeOut Debut : {0} ...", timeout*1000)
-            do! Async.Sleep(timeout*1000) // Probably better to use return! instead ATTENTIONNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN
-            System.Console.WriteLine("TimeOut Fin...")
+            do! Async.Sleep(timeout*1000)
         } 
     
     // FEATURE to add: 5 Tries of 3 seconds and then double the time at each try following Microsoft Standards.
@@ -36,25 +42,21 @@ type AgentSender(ipAddress,port) =
             let tries = 5
             try
                 match count with
-                    |n when n<tries ->  System.Console.WriteLine("Essai num : {0} ...", count)
+                    |n when n<tries ->  System.Console.WriteLine("Attempt number : {0} out of {1} : waiting {2} seconds before restarting...",
+                                                                  count,tries,timeout)
                                         //MOCK THE CONNECTION HERE
-                                        System.Console.WriteLine("MOCK CONNECTION TRY : IP = {0}  and Port = {1} ...", IPAddress.Parse(address) ,p )
-                                        ()
+                                        System.Console.WriteLine("Trying to connect to : IP = {0}  and Port = {1} ...", IPAddress.Parse(address), p)
                                         tcpClient.Connect(IPAddress.Parse(address),p)
                                         System.Console.WriteLine("Apres essai ...")
-                                        if not(tcpClient.Connected) then
-                                            //let cts = new System.Threading.CancellationTokenSource()
-                                            timeout |> waitSynchronously |> Async.RunSynchronously
-                                            System.Console.WriteLine("Toujours pas connecte !!!!...")                                        
-                                            aux (timeout*2) (count+1)
-                                        else
-                                            System.Console.WriteLine("CONNECTED IT WORKS")
+                                        if (tcpClient.Connected) then
+                                            System.Console.WriteLine("Connected to: IP = {0}  and Port = {1} ...", IPAddress.Parse(address), p)                                            
                     |_ -> tcpClient.Connect(IPAddress.Parse(address),p)
                           if not(tcpClient.Connected) then
                               raise (TooManyTriesError("You have tried too many times to connect, the partner is not ready to connect with you"))
             with
                 | :? System.ArgumentException as ex -> printfn "Argument Exception: %s"  ex.Message
                 | :? System.Net.Sockets.SocketException as ex ->  printfn "Socket Exception error code: %d"  ex.ErrorCode
+                                                                  timeout |> waitSynchronously |> Async.RunSynchronously
                                                                   aux (timeout*2) (count+1)
                 | :? System.ObjectDisposedException as ex -> printfn "Object Disposed Exception: %s"  ex.Message
                 | TooManyTriesError(str) -> printfn "Too Many Tries Error: %s" str
@@ -161,14 +163,12 @@ type AgentReceiver(ipAddress,port) =
                     let read = readMessage stream
                     printf "MESSAGE LU :%s  MESSAGES ATTENDU:" (System.Text.ASCIIEncoding.ASCII.GetString(read))
                     message |> Seq.iter (fun x -> printf "%s " (System.Text.ASCIIEncoding.ASCII.GetString(x)) )
-                    channel.Reply([read])
-                    printf "ET LAAAAAAA ?"
-                    (*match read with
+                    match read with
                         |msg when (message |> isIn <| msg) |> not -> failwith "Received a wrong Label, that doesn't belong to the possible Labels at this state"
-                        | _ -> let buf = readPayload stream listTypes
-                               channel.Reply(buf) //deserializeMessage args stream listTypes*)
-                    //deserialize read message 
-                    //channel.Reply(read) // A quoi sa me sert?
+                        | _ -> let buffer = [yield read
+                                             for elem in listTypes do
+                                                yield (readPayload stream elem)]
+                               channel.Reply(buffer) 
                     return! loop()
                 |ReceiveMessage (message,role,listTypes,channel) ->
                     System.Console.WriteLine("AGENT RECEIVER CHERCHE DANS CLIENTMAP... {0} {1} {2}", clientMap.Count ,clientMap.ContainsKey("hey"),role)
@@ -184,8 +184,12 @@ type AgentReceiver(ipAddress,port) =
                     let read = readMessage stream
                     printf "MESSAGE LU :%s  MESSAGES ATTENDU:" (System.Text.ASCIIEncoding.ASCII.GetString(read))
                     message |> Seq.iter (fun x -> printf "%s " (System.Text.ASCIIEncoding.ASCII.GetString(x)) )
-                    channel.Reply([read])
-                    printf "ET LAAAAAAA ?"
+                    match read with
+                        |msg when (message |> isIn <| msg) |> not -> failwith "Received a wrong Label, that doesn't belong to the possible Labels at this state"
+                        | _ -> let buffer = [yield read
+                                             for elem in listTypes do
+                                                yield (readPayload stream elem)]
+                               channel.Reply(buffer) 
                     return! loop()
                     
             }

@@ -27,8 +27,8 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
         let n,stateSet,firstState = triple
         let listTypes = (Set.toList stateSet) |> List.map (fun x -> makeStateType x )
         let firstStateType = findProvidedType listTypes firstState
-        let tupleLabel = makeLabelTypes protocol listTypes
         let tupleRole = makeRoleTypes protocol
+        let tupleLabel = makeLabelTypes protocol listTypes (tupleRole |> fst)
         let listOfRoles = makeRoleList protocol
         let list1 = snd(tupleLabel)
         let list2 = snd(tupleRole)
@@ -39,7 +39,7 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
 
         let configFilePath = parameters.[0]  :?> string
 
-        let naming = __SOURCE_DIRECTORY__ + "\\" + configFilePath
+        let naming = __SOURCE_DIRECTORY__ +  "\..\\"  + configFilePath
         DomainModel.config.Load(naming)
 
 
@@ -64,9 +64,12 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
                     |> addIncludedTypeToProvidedType list2
                     |> addIncludedTypeToProvidedType list1
                     |> addIncludedTypeToProvidedType listTypes
-                    |> addProvidedTypeToAssembly
+                    //|> addProvidedTypeToAssembly
+        let assemblyPath = Path.ChangeExtension(System.IO.Path.GetTempFileName(), ".dll")
+        let assembly = ProvidedAssembly assemblyPath
         ty.SetAttributes(TypeAttributes.Public ||| TypeAttributes.Class)
         ty.HideObjectMethods <- true
+        assembly.AddTypes [ty]
         ty
   
 
@@ -82,24 +85,69 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
         let protocol = parameters.[1] :?> string
         let localRole = parameters.[2] :?> string
 
+        let relativePath = __SOURCE_DIRECTORY__ +  "\..\\"  + file
         let code = new System.Text.StringBuilder()
-        match File.Exists(file) with
-            | true -> let tmp = File.ReadAllLines(file)
-                      for elem in tmp do
-                        code.Append(elem) |> ignore
-            | false -> failwith "this file path is incorrect!!"
-        let json = ScribbleAPI.Root(code = code.ToString(), proto = protocol ,role = localRole )
+        match (File.Exists(file) , File.Exists(relativePath)) with
+            | true , false -> let tmp = File.ReadAllLines(file)
+                              for elem in tmp do
+                                 code.Append(elem) |> ignore
+                               
+            | false , true -> let tmp = File.ReadAllLines(relativePath)
+                              for elem in tmp do
+                                 code.Append(elem) |> ignore
+                               
+            | true , true | false, false ->  failwith (sprintf "this file path is incorrect: %s" relativePath) 
+
+        let str = code.ToString()
+        let replace0 =System.Text.RegularExpressions.Regex.Replace(str,"(\s{2,}|\t+)"," ") 
+        let replace2 = System.Text.RegularExpressions.Regex.Replace(replace0,"\"","\\\"")
+
+        let json = ScribbleAPI.Root(code = replace2 , proto = protocol ,role = localRole )
         
         let jsonStr = sprintf """ {"code": "%s", "proto": "%s", "role": "%s" }""" (json.Code) (json.Proto) (json.Role) 
 
         (*let textJson = """{"code":"module demo;type <dotnet> \"System.Int32\" from \"s\" as Integer;global protocol Fibonacci(role A, role B) { rec Fib { choice at A { fibonacci(Integer,Integer) from A to B; fibonacci(Integer) \nfrom B to A; continue Fib;}or{end() from A to B;}}}",
                            "proto":"demo.Fibonacci",
-                           "role":"A"} """ *)
+                           "role":"A"} """ 
+
+let textJson = """ {"code": "module demo;type <dotnet> \"System.Int32\" from \"Nothing\" as Integer;global protocol Fibonacci(role A, role B){ rec Fib { choice at A { fibonacci(Integer,Integer) from A to B; fibonacci(Integer) from B to A; continue Fib; } or { end() from A to B; } }}",
+                    "proto": "demo.Fibonacci", 
+                    "role": "A" } """
+
+        let textJson = """{"code": "module demo;\ntype <dotnet> \"System.Int32\" from \"s\" as Integer;global protocol Fibonacci(role A, role B){	rec Fib	{		choice at A		{			fibonacci(Integer) from A to B;			fibonacci(Integer) \nfrom B to A;			continue Fib;		}		or		{			end() from A to B;		}	}}",
+                           "proto": "demo.Fibonacci",
+                           "role": "A" } """
+        open FSharp.Data
+                      
+let textJson = """{"code":"module demo;type <dotnet> \"System.Int32\" from \"s\" as Integer;global protocol Fibonacci(role A, role B) { rec Fib { choice at A { fibonacci(Integer,Integer) from A to B; fibonacci(Integer) from B to A; continue Fib;}or{end() from A to B;}}}",
+                           "proto":"demo.Fibonacci",
+                           "role":"A"} """ 
+
+ let textJson = """{"code":"module demo;type <dotnet> \"System.Int32\" from \"rt.jar\" as Int;type <dotnet> \"System.String\" from \"rt.jar\" as String;global protocol Booking(role C, role A, role S){ choice at C { Query(String) from C to A; Quote(Int) from A to C; () from A to S; do Booking(C, A, S); } or { choice at C { Yes() from C to A; Yes() from A to S; Payment(String) from C to S; Ack() from S to C; } or { No() from C to A; No() from A to S; } Bye() from C to A; }}",
+                    "proto":"demo.Booking",
+                    "role":"A"}"""
+                           
+        let fsm = FSharp.Data.Http.RequestString("http://apiscribble.azurewebsites.net/graph.json", 
+                                                    query = ["json",textJson] ,
+                                                    headers = [ FSharp.Data.HttpRequestHeaders.Accept HttpContentTypes.Json ],
+                                                    httpMethod = "GET" )
+
+        let fsm = FSharp.Data.Http.RequestString("http://localhost:8083/graph.json", 
+                                                    query = ["json",textJson] ,
+                                                    headers = [ FSharp.Data.HttpRequestHeaders.Accept HttpContentTypes.Json ],
+                                                    httpMethod = "GET" )
+
+        let fsm = FSharp.Data.Http.RequestString("http://scribble.doc.ic.ac.uk/graph.json",
+                                                    headers = [ FSharp.Data.HttpRequestHeaders.ContentType HttpContentTypes.Json ],
+                                                    body = TextRequest textJson )
+
+                "module demo;type <dotnet> \" System.Int32 \" from \" Nothing \" as Integer;global protocol Fibonacci(role A, role B){ rec Fib { choice at A { fibonacci(Integer) from A to B; fibonacci(Integer) from B to A; continue Fib; } or { end() from A to B; } }}"
+                            *)
         
         // GET THE FSM FROM THE API
         // http://scribbleapi.azurewebsites.net/
         // http://localhost:8083/
-        let fsm = FSharp.Data.Http.RequestString("http://apiscribble.azurewebsites.net/graph.json", 
+        let fsm = FSharp.Data.Http.RequestString("http://localhost:8083/graph.json", 
                                                     query = ["json",jsonStr] ,
                                                     headers = [ FSharp.Data.HttpRequestHeaders.Accept HttpContentTypes.Json ],
                                                     httpMethod = "GET" )
@@ -129,7 +177,7 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
         
         //this.AddNamespace(ns, [providedType])
         
-        this.AddNamespace(ns, [addProvidedTypeToAssembly providedTypeFSM])
-        this.AddNamespace(ns, [addProvidedTypeToAssembly providedTypeFile])
+        this.AddNamespace(ns, [providedTypeFSM])
+        this.AddNamespace(ns, [providedTypeFile])
 [<assembly:TypeProviderAssembly>]
     do()

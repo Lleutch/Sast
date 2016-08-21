@@ -36,7 +36,7 @@ let internal serializeLabel (typeName : string)  =
 
 
 let internal serializeMessage (typeName : string) (listPayload:string list) (args: Expr list) =
-    let mutable buf = args.Length |> System.BitConverter.GetBytes
+    let mutable buf = [||] //args.Length |> System.BitConverter.GetBytes
     buf <- Array.append buf (typeName |> serializeLabel)
 
     let list1 = args
@@ -84,7 +84,7 @@ let deserialize (args: Expr list)  (listTypes:string list) (messages: _ list) (r
                     yield Expr.Coerce(elem,typeof<ISetResult>) ]
     <@@ 
         let result = Regarder.receiveMessage "agent" messages role listTypes 
-        let received = (result |> convert <| listTypes ) |> List.toSeq          
+        let received = (result.Tail |> convert <| listTypes ) |> List.toSeq          
         Runtime.setResults received (%%(Expr.NewArray(typeof<ISetResult>, buffer)):ISetResult []) 
     @@>
                  
@@ -96,7 +96,7 @@ let deserializeAsync (args: Expr list)  (listTypes:string list) (messages: _ lis
         let work = 
             async{            
                 let! result = Regarder.receiveMessageAsync "agent" messages role listTypes 
-                let received = (result |> convert <| listTypes ) |> List.toSeq          
+                let received = (result.Tail |> convert <| listTypes ) |> List.toSeq          
                 Runtime.setResults received (%%(Expr.NewArray(typeof<ISetResult>, buffer)):ISetResult []) 
             }
         Async.Start(work)
