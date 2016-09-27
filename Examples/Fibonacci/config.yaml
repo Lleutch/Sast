@@ -1,0 +1,9 @@
+Partners:
+    - Name: B
+      IP: 127.0.0.1
+      Port: 5001
+
+LocalRole:
+  Name: A
+  IP: 127.0.0.1
+  Port: 5000  

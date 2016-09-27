@@ -38,6 +38,24 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
         let localRoleInfos = parameters.[2]  :?> string*int *)
 
         let configFilePath = parameters.[0]  :?> string
+        let delimitaters = parameters.[1]  :?> string
+        
+        let mutable mapping = Map.empty<string,string list* string list * string list>
+
+        let instance = MappingDelimiters.Parse(delimitaters)
+        for elem in instance do
+            let label = elem.Label
+            let delims = elem.Delims
+            let delim1 = delims.Delim1 |> Array.toList
+            let delim2 = delims.Delim2 |> Array.toList
+            let delim3 = delims.Delim3 |> Array.toList
+            mapping <- mapping.Add(label,(delim1,delim2,delim3)) 
+
+        (*let serializePath = parameters.[1]  :?> string*string
+        let deserializePath = parameters.[2]  :?> string*string
+        let deserializeChoicePath = parameters.[3]  :?> string*string*)
+
+        mapping |> DomainModel.modifyMap 
 
         let naming = __SOURCE_DIRECTORY__ +  "\..\\"  + configFilePath
         DomainModel.config.Load(naming)
@@ -45,7 +63,6 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
 
         (tupleLabel |> fst) |> Regarder.ajouterLabel
         let agentRouter = (DomainModel.config) |> createRouter <| listOfRoles 
-        //let agentRouter = createAgentRouter local partnersInfos localRoleInfos listOfRoles protocol.[0].LocalRole
         Regarder.ajouter "agent" agentRouter
 
         addProperties listTypes listTypes (Set.toList stateSet) (fst tupleLabel) (fst tupleRole) protocol
@@ -105,44 +122,6 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
         let json = ScribbleAPI.Root(code = replace2 , proto = protocol ,role = localRole )
         
         let jsonStr = sprintf """ {"code": "%s", "proto": "%s", "role": "%s" }""" (json.Code) (json.Proto) (json.Role) 
-
-        (*let textJson = """{"code":"module demo;type <dotnet> \"System.Int32\" from \"s\" as Integer;global protocol Fibonacci(role A, role B) { rec Fib { choice at A { fibonacci(Integer,Integer) from A to B; fibonacci(Integer) \nfrom B to A; continue Fib;}or{end() from A to B;}}}",
-                           "proto":"demo.Fibonacci",
-                           "role":"A"} """ 
-
-let textJson = """ {"code": "module demo;type <dotnet> \"System.Int32\" from \"Nothing\" as Integer;global protocol Fibonacci(role A, role B){ rec Fib { choice at A { fibonacci(Integer,Integer) from A to B; fibonacci(Integer) from B to A; continue Fib; } or { end() from A to B; } }}",
-                    "proto": "demo.Fibonacci", 
-                    "role": "A" } """
-
-        let textJson = """{"code": "module demo;\ntype <dotnet> \"System.Int32\" from \"s\" as Integer;global protocol Fibonacci(role A, role B){	rec Fib	{		choice at A		{			fibonacci(Integer) from A to B;			fibonacci(Integer) \nfrom B to A;			continue Fib;		}		or		{			end() from A to B;		}	}}",
-                           "proto": "demo.Fibonacci",
-                           "role": "A" } """
-        open FSharp.Data
-                      
-let textJson = """{"code":"module demo;type <dotnet> \"System.Int32\" from \"s\" as Integer;global protocol Fibonacci(role A, role B) { rec Fib { choice at A { fibonacci(Integer,Integer) from A to B; fibonacci(Integer) from B to A; continue Fib;}or{end() from A to B;}}}",
-                           "proto":"demo.Fibonacci",
-                           "role":"A"} """ 
-
- let textJson = """{"code":"module demo;type <dotnet> \"System.Int32\" from \"rt.jar\" as Int;type <dotnet> \"System.String\" from \"rt.jar\" as String;global protocol Booking(role C, role A, role S){ choice at C { Query(String) from C to A; Quote(Int) from A to C; () from A to S; do Booking(C, A, S); } or { choice at C { Yes() from C to A; Yes() from A to S; Payment(String) from C to S; Ack() from S to C; } or { No() from C to A; No() from A to S; } Bye() from C to A; }}",
-                    "proto":"demo.Booking",
-                    "role":"A"}"""
-                           
-        let fsm = FSharp.Data.Http.RequestString("http://apiscribble.azurewebsites.net/graph.json", 
-                                                    query = ["json",textJson] ,
-                                                    headers = [ FSharp.Data.HttpRequestHeaders.Accept HttpContentTypes.Json ],
-                                                    httpMethod = "GET" )
-
-        let fsm = FSharp.Data.Http.RequestString("http://localhost:8083/graph.json", 
-                                                    query = ["json",textJson] ,
-                                                    headers = [ FSharp.Data.HttpRequestHeaders.Accept HttpContentTypes.Json ],
-                                                    httpMethod = "GET" )
-
-        let fsm = FSharp.Data.Http.RequestString("http://scribble.doc.ic.ac.uk/graph.json",
-                                                    headers = [ FSharp.Data.HttpRequestHeaders.ContentType HttpContentTypes.Json ],
-                                                    body = TextRequest textJson )
-
-                "module demo;type <dotnet> \" System.Int32 \" from \" Nothing \" as Integer;global protocol Fibonacci(role A, role B){ rec Fib { choice at A { fibonacci(Integer) from A to B; fibonacci(Integer) from B to A; continue Fib; } or { end() from A to B; } }}"
-                            *)
         
         // GET THE FSM FROM THE API
         // http://scribbleapi.azurewebsites.net/
@@ -161,21 +140,24 @@ let textJson = """{"code":"module demo;type <dotnet> \"System.Int32\" from \"s\"
     let providedTypeFile = TypeGeneration.createProvidedType tmpAsm "TypeProviderFile"
     
     let parametersFSM = [ProvidedStaticParameter("Protocol",typeof<string>);
-                         ProvidedStaticParameter("Config",typeof<string>);]
-                      (*ProvidedStaticParameter("Local",typeof<bool>,parameterDefaultValue = true);
-                      ProvidedStaticParameter("PartnersInfos",typeof<Map<string,string*int>>,parameterDefaultValue = Map.empty<string,string*int>);
-                      ProvidedStaticParameter("LocalRoleInfos",typeof<string*int>,parameterDefaultValue = ("127.0.0.1",-1));]*)
+                         ProvidedStaticParameter("Config",typeof<string>);
+                         ProvidedStaticParameter("Delimiter",typeof<string>)]
+                        (* ProvidedStaticParameter("SerializeMessagePath",typeof<string*string>);
+                         ProvidedStaticParameter("DeserializeMessagePath",typeof<string*string>);
+                         ProvidedStaticParameter("DerializeChoicePath",typeof<string*string>)]*)
     
-    let parametersFile= [ ProvidedStaticParameter("File Uri",typeof<string>);
+    let parametersFile=  [ProvidedStaticParameter("File Uri",typeof<string>);
                           ProvidedStaticParameter("Global Protocol",typeof<string>);
                           ProvidedStaticParameter("Role",typeof<string>);
-                          ProvidedStaticParameter("Config",typeof<string>);]
+                          ProvidedStaticParameter("Config",typeof<string>);
+                          ProvidedStaticParameter("Delimiter",typeof<string>)]
+                         (* ProvidedStaticParameter("SerializeMessagePath",typeof<string*string>);
+                          ProvidedStaticParameter("DeserializeMessagePath",typeof<string*string>);
+                          ProvidedStaticParameter("DerializeChoicePath",typeof<string*string>)]*)
 
     do 
         providedTypeFSM.DefineStaticParameters(parametersFSM,createTypeWithFSM)
         providedTypeFile.DefineStaticParameters(parametersFile,createTypeWithFile)
-        
-        //this.AddNamespace(ns, [providedType])
         
         this.AddNamespace(ns, [providedTypeFSM])
         this.AddNamespace(ns, [providedTypeFile])

@@ -68,11 +68,21 @@ let internal addMembers (membersInfo:#MemberInfo list) (providedType:ProvidedTyp
 let internal findCurrentIndex current (fsmInstance:ScribbleProtocole.Root []) = // gerer les cas
     let mutable inc = 0
     let mutable index = -1 
-    for event in fsmInstance do
+    let fsm = Array.toList fsmInstance
+    let rec aux (acc:ScribbleProtocole.Root list) count =
+        match acc with
+            |[] -> -1
+            |hd::tl -> if hd.CurrentState = current then
+                          count
+                       else
+                          aux tl (count+1) 
+    aux fsm 0
+
+    (*for event in fsmInstance do
         match event.CurrentState with
             |n when n=current -> index <- inc
             | _ -> inc <- inc + 1
-    index
+    index*)
 
 let internal findNext index (fsmInstance:ScribbleProtocole.Root []) =
     (fsmInstance.[index].NextState)
@@ -154,8 +164,16 @@ let internal createProvidedParameters (event : ScribbleProtocole.Root) =
 
     [for param in payload do
         n <- n+1
-        let genType = generic.MakeGenericType(System.Type.GetType(param))
-        yield ProvidedParameter(("Payload_" + string n),genType)] // returns all the buffer
+        if param.Contains("[]") then
+            let nameParam = param.Replace("[]","")
+            let typing = System.Type.GetType(nameParam)
+            let arrType = typing.MakeArrayType()
+            let genType = generic.MakeGenericType(arrType)
+            yield ProvidedParameter(("Payload_" + string n),genType) // returns all the buffer
+        else
+            let genType = generic.MakeGenericType(System.Type.GetType(param))
+            yield ProvidedParameter(("Payload_" + string n),genType) // returns all the buffer
+    ]
 
 
 let internal toProvidedList (array:_ []) =
@@ -206,10 +224,9 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
                 |i when i <= TypeChoices.NUMBER_OF_CHOICES ->   let assem = typeof<TypeChoices.Choice1>.Assembly
                                                                 let typeCtor = assem.GetType("GenerativeTypeProviderExample.TypeChoices+Choice" + i.ToString())
                                                                 mapping <- mapping.Add("Choice"+ string event.CurrentState,typeCtor)
-                                                                listeType <- typeCtor::listeType 
+                                                                //listeType <- typeCtor::listeType 
                                                                 choiceIter <- choiceIter + 1
                                                                 let listIndexChoice = findSameCurrent event.CurrentState fsmInstance
-                                                                let nextType = findProvidedType providedList (event.NextState)
                                                                 let rec aux (liste:int list) =
                                                                     match liste with
                                                                         |[] -> ()
@@ -223,9 +240,10 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
                                                                                       //if not(alreadySeenLabel listeLabelSeen (currEvent.Label,currEvent.CurrentState)) then
                                                                                         //let name = currEvent.Label.Replace("(","").Replace(")","") 
                                                                                         
-                                                                                      let listTypes = createProvidedParameters event
-                                                                                      let listParam = List.append [ProvidedParameter("Role_State_" + event.NextState.ToString(),mRole.[event.Partner])] listTypes
+                                                                                      let listTypes = createProvidedParameters currEvent
+                                                                                      let listParam = List.append [ProvidedParameter("Role_State_" + currEvent.NextState.ToString(),mRole.[currEvent.Partner])] listTypes
                                                                                       let listPayload = (toList event.Payload)   
+                                                                                      let nextType = findProvidedType providedList (currEvent.NextState)
                                                                                       let myMethod = ProvidedMethod("receive",listParam,nextType,
                                                                                                                       IsStaticMethod = false,
                                                                                                                       InvokeCode = fun args-> let buffers = args.Tail.Tail
@@ -253,9 +271,10 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
                                                                                     //if not(alreadySeenLabel listeLabelSeen (currEvent.Label,currEvent.CurrentState)) then
                                                                                         //let name = currEvent.Label.Replace("(","").Replace(")","") 
                                                                                         
-                                                                                    let listTypes = createProvidedParameters event
-                                                                                    let listParam = List.append [ProvidedParameter("Role_State_" + event.NextState.ToString(),mRole.[event.Partner])] listTypes
-                                                                                    let listPayload = (toList event.Payload)   
+                                                                                    let listTypes = createProvidedParameters currEvent
+                                                                                    let listPayload = (toList currEvent.Payload)   
+                                                                                    let listParam = List.append [ProvidedParameter("Role_State_" + currEvent.NextState.ToString(),mRole.[currEvent.Partner])] listTypes
+                                                                                    let nextType = findProvidedType providedList (currEvent.NextState)                                                                                 
                                                                                     let myMethod = ProvidedMethod("receive",listParam,nextType,
                                                                                                                     IsStaticMethod = false,
                                                                                                                     InvokeCode = fun args-> let buffers = args.Tail.Tail
@@ -276,15 +295,15 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
                                                                                         
                                                                                     aux tl 
                                                                 in aux listIndexChoice 
-                | _ -> failwith ("number of choices > " + TypeChoices .NUMBER_OF_CHOICES.ToString() + " : This protocol won't be taken in account by this TP. ") 
+                | _ -> failwith ("number of choices > " + TypeChoices.NUMBER_OF_CHOICES.ToString() + " : This protocol won't be taken in account by this TP. ") 
 
-        else if not(alreadySeenOnlyLabel listeLabelSeen event.Label) then
+        (*else if not(alreadySeenOnlyLabel listeLabelSeen event.Label) then // THIS IS IF WE WANT LABELS BACK AS ARGUMENT OF THE RECEIVE AND SEND METHODS
             let name = event.Label.Replace("(","").Replace(")","") 
             let t = name |> createProvidedIncludedType
                          |> addCstor (<@@ name :> obj @@> |> createCstor [])
             mapping <- mapping.Add(event.Label,t)
             listeLabelSeen <- (event.Label,event.CurrentState)::listeLabelSeen
-            listeType <- ( t :> System.Type )::listeType
+            listeType <- ( t :> System.Type )::listeType*)
     (mapping,listeType)
 
 
@@ -308,7 +327,10 @@ let rec goingThrough (methodNaming:string) (providedList:ProvidedTypeDefinition 
                 let exprState = Expr.NewObject(c, [])
                 let event = fsmInstance.[b]
                 let fullName = event.Label
-                let message = serializeLabel fullName
+                let labelDelim, payloadDelim, endDelim = getDelims fullName
+                printfn "ALLEZZZZZ1111111"
+                let decode = new System.Text.UTF8Encoding()
+                let message = decode.GetBytes(fullName)
                 let role = event.Partner
                 let listTypes = 
                     match methodName with
@@ -319,13 +341,15 @@ let rec goingThrough (methodNaming:string) (providedList:ProvidedTypeDefinition 
                     match methodName with
                         |"send" | "receive" -> List.append [ProvidedParameter("Role",mRole.[role])] listTypes
                         | _  -> []
-                let listPayload = (toList event.Payload)
+                //let a,b,c= DomainModel.mappingDelimitateur.[fullName]
                 let nameLabel = fullName.Replace("(","").Replace(")","") 
                 match methodName with
                     |"send" -> let myMethod = ProvidedMethod(methodName+nameLabel,listParam,nextType,
                                                                 IsStaticMethod = false,
                                                                 InvokeCode = fun args-> let buffers = args.Tail.Tail
-                                                                                        let buf = serializeMessage fullName (toList event.Payload) buffers
+                                                                                        //let buf = ser buffers
+                                                                                        let buf = serialize fullName buffers (toList event.Payload) (payloadDelim.Head) (endDelim.Head) (labelDelim.Head) 
+                                                                                        //let buf = serializeMessage fullName (toList event.Payload) buffers
                                                                                         let exprAction = <@@ Regarder.sendMessage "agent" (%%buf:byte[]) role @@>
                                                                                         Expr.Sequential(exprAction,exprState) )
                                aType 
@@ -356,7 +380,10 @@ let rec goingThrough (methodNaming:string) (providedList:ProvidedTypeDefinition 
                    let exprState = Expr.NewObject(c, [])
                    let event = fsmInstance.[hd]
                    let fullName = event.Label
-                   let message = serializeLabel(fullName)
+                   let labelDelim, payloadDelim, endDelim = getDelims fullName
+                   printfn "ALLLEZZZZ 2222222"
+                   let decode = new System.Text.UTF8Encoding()
+                   let message = decode.GetBytes(fullName)
                    let role = event.Partner
                    let listTypes = 
                     match methodName with
@@ -367,13 +394,15 @@ let rec goingThrough (methodNaming:string) (providedList:ProvidedTypeDefinition 
                     match methodName with
                         |"send" | "receive" -> List.append [ProvidedParameter("Role",mRole.[role])] listTypes
                         | _  -> []
-                    
+                   
                    let nameLabel = fullName.Replace("(","").Replace(")","")     
                    match methodName with
                     |"send" -> let myMethod = ProvidedMethod(methodName+nameLabel,listParam,nextType,
                                                                 IsStaticMethod = false,
                                                                 InvokeCode = fun args-> let buffers = args.Tail.Tail
-                                                                                        let buf = serializeMessage fullName (toList event.Payload) buffers
+                                                                                        //let buf = ser buffers
+                                                                                        let buf = serialize fullName buffers (toList event.Payload) (payloadDelim.Head) (endDelim.Head) (labelDelim.Head) 
+                                                                                        //let buf = serializeMessage fullName (toList event.Payload) buffers
                                                                                         let exprAction = <@@ Regarder.sendMessage "agent" (%%buf:byte[]) role @@>
                                                                                         Expr.Sequential(exprAction,exprState) )
                                aType 
@@ -396,7 +425,7 @@ let rec goingThrough (methodNaming:string) (providedList:ProvidedTypeDefinition 
                                     |> addMethod myMethodAsync
                                     |> ignore                 
                 
-                    | _ -> failwith (sprintf " Mistake you have a method named : %s !!!!!!" methodName  )                    
+                    | _ -> failwith (sprintf " Mistake you have a method named : %s  %d  %d !!!!!!" methodName  (fsmInstance.[hd].NextState) (fsmInstance.[hd].CurrentState) )                    
                    goingThrough methodName providedList aType tl mLabel mRole fsmInstance 
 
 
@@ -404,7 +433,10 @@ let internal getAllChoiceLabels (indexList : int list) (fsmInstance:ScribbleProt
     let rec aux list acc =
         match list with
             |[] -> acc
-            |hd::tl -> let labelBytes = fsmInstance.[hd].Label |> serializeLabel
+            |hd::tl -> 
+                       let label = fsmInstance.[hd].Label
+                       let labelDelim,_,_ = getDelims label
+                       let labelBytes = label |> serLabel <| (labelDelim.Head) 
                        aux tl (labelBytes::acc) 
     in aux indexList []
 
