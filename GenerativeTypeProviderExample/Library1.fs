@@ -57,7 +57,7 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
 
         mapping |> DomainModel.modifyMap 
 
-        let naming = __SOURCE_DIRECTORY__ +  "\..\\"  + configFilePath
+        let naming = configFilePath
         DomainModel.config.Load(naming)
 
 
@@ -102,7 +102,7 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
         let protocol = parameters.[1] :?> string
         let localRole = parameters.[2] :?> string
 
-        let relativePath = __SOURCE_DIRECTORY__ +  "\..\\"  + file
+        let relativePath = file
         let code = new System.Text.StringBuilder()
         match (File.Exists(file) , File.Exists(relativePath)) with
             | true , false -> let tmp = File.ReadAllLines(file)
