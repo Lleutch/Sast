@@ -7,7 +7,7 @@ let delims = """ [ {"label" : "fib", "delims": {"delim1": [":"] , "delim2": [","
                    {"label" : "bye", "delims": {"delim1": [":"] , "delim2": [","] , "delim3": [";"] } } ] """
 
 
-type Fib = Provided.TypeProviderFile<"Examples/Fibonacci/Fibonacci.scr","demo.Fibonacci","A","Examples/Fibonacci/config.yaml",Delimiter=delims>
+type Fib = Provided.TypeProviderFile<"/../Examples/Fibonacci/Fibonacci.scr","Fibonacci","A","/../Examples/Fibonacci/config.yaml",Delimiter=delims>
 
 let numIter = 10-2
 let B = Fib.B.instance

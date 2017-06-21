@@ -65,6 +65,7 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
         let agentRouter = (DomainModel.config) |> createRouter <| listOfRoles 
         Regarder.ajouter "agent" agentRouter
 
+
         addProperties listTypes listTypes (Set.toList stateSet) (fst tupleLabel) (fst tupleRole) protocol
 
         let ctor = firstStateType.GetConstructors().[0]                                                               
@@ -102,32 +103,23 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
         let protocol = parameters.[1] :?> string
         let localRole = parameters.[2] :?> string
 
-        let relativePath = file
-        let code = new System.Text.StringBuilder()
-        match (File.Exists(file) , File.Exists(relativePath)) with
-            | true , false -> let tmp = File.ReadAllLines(file)
-                              for elem in tmp do
-                                 code.Append(elem) |> ignore
-                               
-            | false , true -> let tmp = File.ReadAllLines(relativePath)
-                              for elem in tmp do
-                                 code.Append(elem) |> ignore
-                               
-            | true , true | false, false ->  failwith (sprintf "this file path is incorrect: %s" relativePath) 
+        let relativePath = __SOURCE_DIRECTORY__ + file
+        let code =
+            match (File.Exists(file) , File.Exists(relativePath)) with
+            | true , false -> File.ReadAllText(file)
+            | false , true -> File.ReadAllText(relativePath)                               
+            | true , true -> File.ReadAllText(relativePath)
+            | false, false ->  
+                File.ReadAllText(relativePath)
 
         let str = code.ToString()
-        let replace0 =System.Text.RegularExpressions.Regex.Replace(str,"(\s{2,}|\t+)"," ") 
+        let replace0 = System.Text.RegularExpressions.Regex.Replace(str,"(\s{2,}|\t+)"," ") 
         let replace2 = System.Text.RegularExpressions.Regex.Replace(replace0,"\"","\\\"")
+        let str = 
+            sprintf """{"code":"%s","proto":"%s","role":"%s"}""" replace2 protocol localRole
 
-        let json = ScribbleAPI.Root(code = replace2 , proto = protocol ,role = localRole )
-        
-        let jsonStr = sprintf """ {"code": "%s", "proto": "%s", "role": "%s" }""" (json.Code) (json.Proto) (json.Role) 
-        
-        // GET THE FSM FROM THE API
-        // http://scribbleapi.azurewebsites.net/
-        // http://localhost:8083/
         let fsm = FSharp.Data.Http.RequestString("http://localhost:8083/graph.json", 
-                                                    query = ["json",jsonStr] ,
+                                                    query = ["json",str] ,
                                                     headers = [ FSharp.Data.HttpRequestHeaders.Accept HttpContentTypes.Json ],
                                                     httpMethod = "GET" )
 

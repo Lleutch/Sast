@@ -171,6 +171,9 @@ let internal createProvidedParameters (event : ScribbleProtocole.Root) =
             let genType = generic.MakeGenericType(arrType)
             yield ProvidedParameter(("Payload_" + string n),genType) // returns all the buffer
         else
+            // Currently this Case is throwing an error due to the fact that 
+            // The type returned by the scribble API is not an F# type
+            // This case should be handled properly
             let genType = generic.MakeGenericType(System.Type.GetType(param))
             yield ProvidedParameter(("Payload_" + string n),genType) // returns all the buffer
     ]

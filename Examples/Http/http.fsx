@@ -15,8 +15,8 @@ let delims = """ [ {"label" : "GET", "delims": {"delim1": [":"] , "delim2": [","
                    {"label" : "ContentLength", "delims": {"delim1": [":"] , "delim2": [","] , "delim3": [";"] } },
                    {"label" : "CONTENTType", "delims": {"delim1": [":"] , "delim2": [","] , "delim3": [";"] } } ] """
 
-type Http = Provided.TypeProviderFile<"Examples/Http/http.scr","demo.Http"
-                                        ,"S","Examples/Http/http.yaml",Delimiter=delims>
+type Http = Provided.TypeProviderFile<"/../Examples/Http/http.scr","Http"
+                                        ,"S","/../Examples/Http/http.yaml",Delimiter=delims>
 
 let bufs = new DomainModel.Buf<string>()
 let bufb = new DomainModel.Buf<byte[]>()

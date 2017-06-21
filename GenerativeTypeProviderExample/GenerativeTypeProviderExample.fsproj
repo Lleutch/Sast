@@ -73,9 +73,10 @@
   </ItemGroup>
   <ItemGroup>
     <Reference Include="FSharp.Configuration">
-      <HintPath>..\packages\FSharp.Configuration.0.6.1\lib\net40\FSharp.Configuration.dll</HintPath>
+      <HintPath>..\packages\FSharp.Configuration.0.6.4\lib\net40\FSharp.Configuration.dll</HintPath>
       <Private>True</Private>
     </Reference>
+    <Reference Include="FSharp.Configuration" />
     <Reference Include="FSharp.Core">
       <HintPath>..\packages\FSharp.Core.3.1.2.5\lib\net40\FSharp.Core.dll</HintPath>
       <Private>True</Private>
@@ -84,15 +85,12 @@
       <HintPath>..\packages\FSharp.Data.2.3.1\lib\net40\FSharp.Data.dll</HintPath>
       <Private>True</Private>
     </Reference>
-    <Reference Include="FsPickler">
-      <HintPath>..\packages\FsPickler.3.0.0\lib\net45\FsPickler.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
     <Reference Include="mscorlib" />
     <Reference Include="SharpYaml">
-      <HintPath>..\packages\FSharp.Configuration.0.6.1\lib\net40\SharpYaml.dll</HintPath>
+      <HintPath>..\packages\FSharp.Configuration.0.6.4\lib\net40\SharpYaml.dll</HintPath>
       <Private>True</Private>
     </Reference>
+    <Reference Include="SharpYaml" />
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Numerics" />
