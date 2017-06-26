@@ -151,6 +151,7 @@ publish/
 # in these scripts will be unencrypted
 PublishScripts/
 
+packages
 # NuGet Packages
 *.nupkg
 # The packages folder can be ignored because of Package Restore
@@ -242,7 +243,6 @@ FakesAssemblies/
 _Pvt_Extensions
 
 # Paket dependency manager
-.paket/paket.exe
 paket-files/
 
 # FAKE - F# Make
