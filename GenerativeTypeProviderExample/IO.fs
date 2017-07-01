@@ -22,15 +22,15 @@ let writeBytes (outputStream : Stream) (buf : byte[])  =
     let dos = new BinaryWriter(outputStream)
     dos.Write(buf)
 
-let readLabel (inputStream : Stream) (labelDelim : string) = 
-    let dis = new BinaryReader(inputStream)
-    let rec readingBytes accLabel =
-        let readByte = dis.ReadByte()
-        match readByte with
-            | labelDelim -> let decoder = new UTF8Encoding()
-                            accLabel |> decoder.GetString
-            | _ -> readingBytes (Array.append accLabel [|readByte|])
-    in readingBytes [||]
+//let readLabel (inputStream : Stream) (labelDelim : string) =  
+//    let dis = new BinaryReader(inputStream)
+//    let rec readingBytes accLabel =
+//        let readByte = dis.ReadByte()
+//        match readByte with
+//            | labelDelim -> let decoder = new UTF8Encoding()
+//                            accLabel |> decoder.GetString
+//            | _ -> readingBytes (Array.append accLabel [|readByte|])
+//    in readingBytes [||]
 
 
 
