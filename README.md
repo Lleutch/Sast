@@ -1,1 +1,1 @@
-# GenerativeTypeProviderExample
+# Sast

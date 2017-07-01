@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 14
 VisualStudioVersion = 14.0.25420.1
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "GenerativeTypeProviderExample", "GenerativeTypeProviderExample\GenerativeTypeProviderExample.fsproj", "{5CBC28B4-3227-40AB-9D03-D5F185097991}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Sast", "src\Sast\Sast.fsproj", "{5CBC28B4-3227-40AB-9D03-D5F185097991}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Project", "Project", "{3D798632-2789-440E-B58A-9C0C6FE441C3}"
 	ProjectSection(SolutionItems) = preProject

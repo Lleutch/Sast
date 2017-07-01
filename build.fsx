@@ -52,27 +52,26 @@ Target "AssemblyInfo" (fun _ ->
         )
 )
 
-// Build a NuGet package
-Target "NuGet" (fun _ ->
-    Paket.Pack(fun p -> 
-        { p with
-            OutputPath = buildDir
-            TemplateFile = "paket.template"
-            Version = release.NugetVersion
-            ReleaseNotes = toLines release.Notes})
-)
-
-Target "PublishNuget" (fun _ ->
-    Paket.Push(fun p -> 
-        { p with
-            WorkingDir = buildDir })
-)
+//// Build a NuGet package
+//Target "NuGet" (fun _ ->
+//    Paket.Pack(fun p -> 
+//        { p with
+//            OutputPath = buildDir
+//            Version = release.NugetVersion
+//            ReleaseNotes = toLines release.Notes})
+//)
+//
+//Target "PublishNuget" (fun _ ->
+//    Paket.Push(fun p -> 
+//        { p with
+//            WorkingDir = buildDir })
+//)
 
 "Clean"
   ==> "AssemblyInfo"
   ==> "Build"
-  ==> "NuGet"
-  ==> "PublishNuget"
+//  ==> "NuGet"
+//  ==> "PublishNuget"
 
 
 RunTargetOrDefault "Build"
