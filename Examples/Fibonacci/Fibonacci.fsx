@@ -1,4 +1,4 @@
-#r "../../GenerativeTypeProviderExample/bin/Debug/GenerativeTypeProviderExample.dll"
+#r "../../src/Sast/bin/Debug/Sast.dll"
 
 open GenerativeTypeProviderExample
                         
@@ -7,12 +7,22 @@ let delims = """ [ {"label" : "fib", "delims": {"delim1": [":"] , "delim2": [","
                    {"label" : "bye", "delims": {"delim1": [":"] , "delim2": [","] , "delim3": [";"] } } ] """
 
 
-type Fib = Provided.TypeProviderFile<"/../Examples/Fibonacci/Fibonacci.scr","Fibonacci","A","/../Examples/Fibonacci/config.yaml",Delimiter=delims>
+[<Literal>]
+let typeAliasing =
+    """ [ {"alias" : "Integer", "type": "System.Int32"} ] """
+
+type Fib = 
+    Provided.TypeProviderFile<"../../../Examples/Fibonacci/Fibonacci.scr"
+                               ,"Fibonacci"
+                               ,"A"
+                               ,"../../../Examples/Fibonacci/config.yaml"
+                               ,Delimiter=delims
+                               ,TypeAliasing=typeAliasing>
 
 let numIter = 10-2
 let B = Fib.B.instance
 
-let rec fibrec a b iter (c:Fib.State1) =
+let rec fibrec a b iter (c:Fib.State4) =
     let res = new DomainModel.Buf<int>()
     printfn"number of iter: %d" (numIter - iter)
     match iter with

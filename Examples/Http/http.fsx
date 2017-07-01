@@ -1,4 +1,4 @@
-#r "../../GenerativeTypeProviderExample/bin/Debug/GenerativeTypeProviderExample.dll"
+#r "../../src/Sast/bin/Debug/Sast.dll"
 
 open System
 open GenerativeTypeProviderExample
@@ -15,8 +15,19 @@ let delims = """ [ {"label" : "GET", "delims": {"delim1": [":"] , "delim2": [","
                    {"label" : "ContentLength", "delims": {"delim1": [":"] , "delim2": [","] , "delim3": [";"] } },
                    {"label" : "CONTENTType", "delims": {"delim1": [":"] , "delim2": [","] , "delim3": [";"] } } ] """
 
-type Http = Provided.TypeProviderFile<"/../Examples/Http/http.scr","Http"
-                                        ,"S","/../Examples/Http/http.yaml",Delimiter=delims>
+
+[<Literal>]
+let typeAliasing =
+    """ [ {"alias" : "string", "type": "System.String"},
+          {"alias" : "int", "type": "System.Int32"},
+          {"alias" : "date", "type": "System.DateTime"} ] """
+
+type Http = Provided.TypeProviderFile<"../../../Examples/Http/http.scr"
+                                      ,"Http"
+                                      ,"S"
+                                      ,"../../../Examples/Http/http.yaml"
+                                      ,Delimiter=delims
+                                      ,TypeAliasing = typeAliasing>
 
 let bufs = new DomainModel.Buf<string>()
 let bufb = new DomainModel.Buf<byte[]>()
@@ -39,7 +50,7 @@ let rec headerPost (branch: TypeChoices.Choice2)=
     | :? Http.BODY as body -> body.receive(client,bufs)
 
 
-let rec httpFun (firstState:Http.State1) =                                                            
+let rec httpFun (firstState:Http.State24) =                                                            
   let verb = firstState.branch()
   match verb with
     | :? Http.GET as get -> let receiveGet = get.receive(client,bufs)

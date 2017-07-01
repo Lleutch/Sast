@@ -13,6 +13,7 @@ open GenerativeTypeProviderExample.TypeGeneration
 open GenerativeTypeProviderExample.DomainModel
 open GenerativeTypeProviderExample.CommunicationAgents
 open GenerativeTypeProviderExample.Regarder
+open System.Text.RegularExpressions
 
 
 [<TypeProvider>]
@@ -22,6 +23,19 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
     let tmpAsm = Assembly.LoadFrom(config.RuntimeAssembly)
 
     let generateTypes (fsm:string) (name:string) (parameters:obj[]) = 
+
+        let configFilePath = parameters.[0]  :?> string
+        let delimitaters = parameters.[1]  :?> string
+        let typeAliasing = parameters.[2] :?> string
+
+
+        let fsm = 
+            let aliases = DotNetTypesMapping.Parse(typeAliasing)
+            let mutable prot = fsm
+            for alias in aliases do
+                 prot <- Regex.Replace(prot,alias.Alias,alias.Type)
+            prot
+
         let protocol = ScribbleProtocole.Parse(fsm)
         let triple= stateSet protocol
         let n,stateSet,firstState = triple
@@ -37,8 +51,6 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
         let partnersInfos = parameters.[1]  :?> Map<string,string*int>
         let localRoleInfos = parameters.[2]  :?> string*int *)
 
-        let configFilePath = parameters.[0]  :?> string
-        let delimitaters = parameters.[1]  :?> string
         
         let mutable mapping = Map.empty<string,string list* string list * string list>
 
@@ -57,7 +69,7 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
 
         mapping |> DomainModel.modifyMap 
 
-        let naming = configFilePath
+        let naming = __SOURCE_DIRECTORY__ + configFilePath
         DomainModel.config.Load(naming)
 
 
@@ -133,7 +145,8 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
     
     let parametersFSM = [ProvidedStaticParameter("Protocol",typeof<string>);
                          ProvidedStaticParameter("Config",typeof<string>);
-                         ProvidedStaticParameter("Delimiter",typeof<string>)]
+                         ProvidedStaticParameter("Delimiter",typeof<string>);
+                         ProvidedStaticParameter("TypeAliasing",typeof<string>)]
                         (* ProvidedStaticParameter("SerializeMessagePath",typeof<string*string>);
                          ProvidedStaticParameter("DeserializeMessagePath",typeof<string*string>);
                          ProvidedStaticParameter("DerializeChoicePath",typeof<string*string>)]*)
@@ -142,7 +155,8 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
                           ProvidedStaticParameter("Global Protocol",typeof<string>);
                           ProvidedStaticParameter("Role",typeof<string>);
                           ProvidedStaticParameter("Config",typeof<string>);
-                          ProvidedStaticParameter("Delimiter",typeof<string>)]
+                          ProvidedStaticParameter("Delimiter",typeof<string>);
+                          ProvidedStaticParameter("TypeAliasing",typeof<string>)]
                          (* ProvidedStaticParameter("SerializeMessagePath",typeof<string*string>);
                           ProvidedStaticParameter("DeserializeMessagePath",typeof<string*string>);
                           ProvidedStaticParameter("DerializeChoicePath",typeof<string*string>)]*)

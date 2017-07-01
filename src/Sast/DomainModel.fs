@@ -10,6 +10,9 @@ type ScribbleAPI = FSharp.Data.JsonProvider<""" { "code":"Code", "proto":"global
 
 type MappingDelimiters = FSharp.Data.JsonProvider<""" [ {"label" : "string", "delims": {"delim1": ["delim1"] , "delim2": ["delim2"] , "delim3": ["delim3"] } } ] """>
 
+// workaround for duplication of convertion between type aliases and real type.
+type DotNetTypesMapping = FSharp.Data.JsonProvider<""" [ {"alias" : "aliasType", "type": "RealType"} ] """>
+
 type ISetResult =
     abstract member SetValue : obj -> unit
 
