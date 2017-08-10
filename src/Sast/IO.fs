@@ -1,4 +1,4 @@
-﻿module GenerativeTypeProviderExample.IO
+﻿module ScribbleGenerativeTypeProvider.IO
 
 open ProviderImplementation.ProvidedTypes // open the providedtypes.fs file
 open System.Net.Sockets
@@ -6,9 +6,9 @@ open System.IO
 open System.Text
 open System
 open Microsoft.FSharp.Quotations
-open GenerativeTypeProviderExample.DomainModel
-open GenerativeTypeProviderExample.Regarder
-open GenerativeTypeProviderExample.CommunicationAgents
+open ScribbleGenerativeTypeProvider.DomainModel
+open ScribbleGenerativeTypeProvider.Regarder
+open ScribbleGenerativeTypeProvider.CommunicationAgents
 open System.Threading.Tasks
 
 

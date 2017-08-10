@@ -73,11 +73,21 @@
     <Compile Include="Regarder.fs" />
     <Compile Include="IO.fs" />
     <Compile Include="TypeGeneration.fs" />
-    <Compile Include="Library1.fs" />
+    <Compile Include="ScribbleParser.fs" />
+    <Compile Include="ScribbleGenerativeTypeProvider.fs" />
     <None Include="Script.fsx" />
     <Content Include="paket.references" />
+    <Content Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
+    <Reference Include="FParsec">
+      <HintPath>..\..\packages\FParsec.1.0.2\lib\net40-client\FParsec.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="FParsecCS">
+      <HintPath>..\..\packages\FParsec.1.0.2\lib\net40-client\FParsecCS.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
     <Reference Include="FSharp.Configuration">
       <HintPath>..\..\packages\FSharp.Configuration\lib\net40\FSharp.Configuration.dll</HintPath>
     </Reference>

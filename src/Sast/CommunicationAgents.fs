@@ -1,4 +1,4 @@
-﻿module GenerativeTypeProviderExample.CommunicationAgents
+﻿module ScribbleGenerativeTypeProvider.CommunicationAgents
 
 
 // Outside namespaces and modules
@@ -8,7 +8,7 @@ open System.Net
 open System.Text
 open System
 // ScribbleProvider specific namespaces and modules
-open GenerativeTypeProviderExample.DomainModel
+open ScribbleGenerativeTypeProvider.DomainModel
 open System.Collections.Generic
 
 

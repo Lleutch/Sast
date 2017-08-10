@@ -1,9 +1,12 @@
 Partners:
-    - Name: B
+    - Name: S
       IP: 127.0.0.1
-      Port: 5001
+      Port: 5005
 
 LocalRole:
-  Name: A
+  Name: C
   IP: 127.0.0.1
-  Port: 5000  
+  Port: 5004
+
+ScribblePath:
+   FileName: "C:/Users/rn710/Repositories/scribble-java/scribblec.bat"

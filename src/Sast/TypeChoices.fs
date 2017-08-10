@@ -1,4 +1,4 @@
-﻿module GenerativeTypeProviderExample.TypeChoices
+﻿module ScribbleGenerativeTypeProvider.TypeChoices
 
 [<Literal>]
 let NUMBER_OF_CHOICES = 40

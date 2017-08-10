@@ -1,6 +1,6 @@
-﻿module GenerativeTypeProviderExample.Regarder 
+﻿module ScribbleGenerativeTypeProvider.Regarder 
 
-open GenerativeTypeProviderExample.CommunicationAgents
+open ScribbleGenerativeTypeProvider.CommunicationAgents
 
 let mutable dico = Map.empty<string,AgentRouter>
 let mutable changed = false
