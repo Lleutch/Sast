@@ -13,8 +13,11 @@ let delims = """ [ {"label" : "ADD", "delims": {"delim1": [":"] , "delim2": [","
 let typeAliasing =
     """ [ {"alias" : "Int", "type": "System.Int32"} ] """
 
+
+C:\Users\rn710\Repositories\GenerativeTypeProviderExample\Examples\Fibonacci
+
 type Fib = 
-    Provided.TypeProviderFile<"C:/Users/rn710/Repositories/scribble-java/Fib.scr" // Fully specified path to the scribble file
+    Provided.TypeProviderFile<"C:/Users/rn710/Repositories/GenerativeTypeProviderExample/Examples/Fibonacci/scribble-java/Fib.scr" // Fully specified path to the scribble file
                                ,"Adder" // name of the protocol
                                ,"C" // local role
                                ,"../../../Examples/Fibonacci/config.yaml" // config file containing IP and port for each role and the path to the scribble script
@@ -25,7 +28,7 @@ type Fib =
 let numIter = 10-2
 let S = Fib.S.instance
 
-let rec fibrec a b iter (c0:Fib.State10) =
+let rec fibrec a b iter (c0:Fib.State9) =
     let res = new DomainModel.Buf<int>()
     printfn"number of iter: %d" (numIter - iter)
     let c = c0.sendHELLO(S, a, b)
