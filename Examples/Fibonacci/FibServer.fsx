@@ -20,7 +20,7 @@ type Fib =
                                ,"../../../Examples/Fibonacci/configServer.yaml"
                                ,Delimiter=delims
                                ,TypeAliasing=typeAliasing
-                               ,ScribbleSource = ScribbleSource.LocalExecutable>
+                               ,ScribbleSource = ScribbleSource.File>
 
 
 let numIter = 10-2
