@@ -14,13 +14,13 @@ let typeAliasing =
     """ [ {"alias" : "Int", "type": "System.Int32"} ] """
 
 type Fib = 
-    Provided.TypeProviderFile<"C:/Users/rn710/Repositories/scribble-java/Fib.scr"
+    Provided.TypeProviderFile<"../../../Examples/Fib.scr"
                                ,"Adder"
                                ,"S"
                                ,"../../../Examples/Fibonacci/configServer.yaml"
                                ,Delimiter=delims
                                ,TypeAliasing=typeAliasing
-                               ,ScribbleSource = ScribbleSource.File>
+                               ,ScribbleSource = ScribbleSource.LocalExecutable>
 
 
 let numIter = 10-2

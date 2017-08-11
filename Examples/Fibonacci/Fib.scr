@@ -10,13 +10,13 @@ global protocol Adder(role C, role S)
 
 	choice at C
 	{
-		ADD(Int, Int) from C to S;
-		RES(Int) from S to C;
-		do Adder(C, S);
+		ADD(Int,Int) from C to S;
+		RES(Int) from S to C; 
+		do Adder(C, S); 
 	}
 	or
 	{
 		BYE() from C to S;
 		BYE() from S to C;
-	}	
+	}
 }

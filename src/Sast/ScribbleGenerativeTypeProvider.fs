@@ -153,12 +153,13 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
                                                 | None -> failwith "The file given does not contain a valid fsm"
                     |ScribbleSource.LocalExecutable ->  let p = new Process();
                                                         //redirect the output stream
-                                                        let scribbleScript = DomainModel.config.ScribblePath.FileName
+                                                        let scribbleScript = "cmd.exe"
+                                                        let batFile = DomainModel.config.ScribblePath.FileName 
                                                         p.StartInfo.UseShellExecute <- false;
                                                         p.StartInfo.RedirectStandardOutput <- true;
                                                         p.StartInfo.FileName <- scribbleScript
                                                         p.StartInfo.CreateNoWindow <- true
-                                                        let scribbleArgs = sprintf """%s -fsm %s %s""" file protocol localRole
+                                                        let scribbleArgs = sprintf """%s %s -fsm %s %s""" batFile file protocol localRole
                                                         p.StartInfo.Arguments <- scribbleArgs
                                                         let res = p.Start()
                                                         //read the output stream
