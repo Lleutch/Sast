@@ -9,6 +9,4 @@ LocalRole:
   Port: 5004
 
 ScribblePath:
-   FileName: "C:/cygwin64/home/rhu/code/eclipse/scribble/github.com/rumineykova/scribble-java/scribblec.bat"
-
-   C:\cygwin64\home\rhu\code\vs\scribble\github.com\rumineykova\Sast\Examples\Fibonacci
+  FileName: "C:/Users/rn710/Repositories/scribble-java/scribblec.bat"
