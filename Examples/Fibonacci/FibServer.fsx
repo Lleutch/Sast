@@ -14,7 +14,7 @@ let typeAliasing =
     """ [ {"alias" : "Int", "type": "System.Int32"} ] """
 
 type Fib = 
-    Provided.TypeProviderFile<"../../../Examples/Fib.scr"
+    Provided.TypeProviderFile<"C:/Users/rn710/Repositories/GenerativeTypeProviderExample/Examples/Fibonacci/Fib.scr"
                                ,"Adder"
                                ,"S"
                                ,"../../../Examples/Fibonacci/configServer.yaml"
@@ -31,7 +31,7 @@ let C = Fib.C.instance
 let res1 = new DomainModel.Buf<int>()
 let res2 = new DomainModel.Buf<int>()
 
-let rec fibServer (c0:Fib.State23) =
+let rec fibServer (c0:Fib.State21) =
     let c = c0.receiveHELLO(C, res1, res2)
     match c.branch() with 
         | :? Fib.BYE as bye-> 
