@@ -17,6 +17,7 @@ global protocol Request(role C, role S)
   } or {
     POST(string) from C to S;
   }
+
   rec X
   {
       choice at C

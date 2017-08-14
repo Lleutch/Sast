@@ -129,13 +129,21 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
         let scribbleSource = parameters.[6] :?> ScribbleSource
 
         let relativePath = __SOURCE_DIRECTORY__ + file
-        let code =
-            match (File.Exists(file) , File.Exists(relativePath)) with
+
+        let pathToFile = match File.Exists(file) with 
+                        | true -> file 
+                        | false -> match File.Exists(relativePath) with 
+                                    | true -> relativePath
+                                    | false -> failwith "The given file does not exist"
+        let code = File.ReadAllText(pathToFile)
+
+        (*    match (File.Exists(file) , File.Exists(relativePath)) with
             | true , false -> File.ReadAllText(file)
             | false , true -> File.ReadAllText(relativePath)                               
             | true , true -> File.ReadAllText(relativePath)
             | false, false ->  
                 File.ReadAllText(relativePath)
+        *)
 
         let fsm = match scribbleSource with 
                     | ScribbleSource.WebAPI ->  
@@ -160,7 +168,8 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
                                                         p.StartInfo.RedirectStandardOutput <- true;
                                                         p.StartInfo.FileName <- scribbleScript
                                                         p.StartInfo.CreateNoWindow <- true
-                                                        let scribbleArgs = sprintf """/C %s %s -fsm %s %s""" batFile file protocol localRole
+
+                                                        let scribbleArgs = sprintf """/C %s %s -fsm %s %s""" batFile pathToFile protocol localRole
                                                         p.StartInfo.Arguments <- scribbleArgs
                                                         let parsedFile = new StringBuilder()
                                                         p.OutputDataReceived.Add(fun (args) -> let x = parsedFile.Append(sprintf """%s %s""" args.Data System.Environment.NewLine); 
