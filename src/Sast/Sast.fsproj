@@ -89,6 +89,7 @@
     <Compile Include="IO.fs" />
     <Compile Include="TypeGeneration.fs" />
     <Compile Include="ScribbleParser.fs" />
+    <Compile Include="AsstScribbleParser.fs" />
     <Compile Include="ScribbleGenerativeTypeProvider.fs" />
     <Content Include="packages.config" />
     <None Include="paket.references" />

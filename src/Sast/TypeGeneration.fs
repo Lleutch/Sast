@@ -9,7 +9,7 @@ open System.Threading.Tasks
 // ScribbleProvider specific namespaces and modules
 open ScribbleGenerativeTypeProvider.DomainModel
 open ScribbleGenerativeTypeProvider.CommunicationAgents
-open ScribbleGenerativeTypeProvider.IO
+open ScribbleGenerativeTypeProvider.IO 
 
 (******************* TYPE PROVIDER'S HELPERS *******************)
 

@@ -11,7 +11,7 @@ let delims = """ [ {"label" : "ADD", "delims": {"delim1": [":"] , "delim2": [","
 
 [<Literal>]
 let typeAliasing =
-    """ [ {"alias" : "Int", "type": "System.Int32"} ] """
+    """ [ {"alias" : "int", "type": "System.Int32"} ] """
 
 // C:/cygwin64/home/rhu/code/vs/scribble/github.com/rumineykova/Sast/Examples/Fibonacci/
 type Fib = 
@@ -26,14 +26,14 @@ type Fib =
 let numIter = 10-2
 let S = Fib.S.instance
 
-let rec fibrec a b iter (c0:Fib.State9) =
+let rec fibrec a b iter (c0:Fib.State7) =
     let res = new DomainModel.Buf<int>()
     printfn"number of iter: %d" (numIter - iter)
-    let c = c0.sendHELLO(S, a, b)
+    let c = c0.sendHELLO(S, a)
 
     match iter with
         |0 -> c.sendBYE(S).receiveBYE(S).finish()
-        |n -> let c1 = c.sendADD(S, a, b)
+        |n -> let c1 = c.sendADD(S, a)
               let c2 = c1.receiveRES(S, res)
               printfn "Fibo : %d" (res.getValue())
               Async.RunSynchronously(Async.Sleep(1000))

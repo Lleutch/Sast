@@ -14,7 +14,7 @@ open ScribbleGenerativeTypeProvider.TypeGeneration
 open ScribbleGenerativeTypeProvider.DomainModel
 open ScribbleGenerativeTypeProvider.CommunicationAgents
 open ScribbleGenerativeTypeProvider.Regarder
-open ScribbleGenerativeTypeProvider.ScribbleParser
+open ScribbleGenerativeTypeProvider.AsstScribbleParser
 open System.Text.RegularExpressions
 open System.Text
 
@@ -169,17 +169,21 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
                                                         p.StartInfo.FileName <- scribbleScript
                                                         p.StartInfo.CreateNoWindow <- true
 
-                                                        let scribbleArgs = sprintf """/C %s %s -fsm %s %s""" batFile pathToFile protocol localRole
+                                                        //let scribbleArgs = sprintf """/C %s %s -fsm %s %s""" batFile pathToFile protocol localRole
+                                                        let scribbleArgs = sprintf """/C %s %s -ass %s -ass-fsm %s""" batFile pathToFile protocol localRole
                                                         p.StartInfo.Arguments <- scribbleArgs
                                                         let parsedFile = new StringBuilder()
-                                                        p.OutputDataReceived.Add(fun (args) -> let x = parsedFile.Append(sprintf """%s %s""" args.Data System.Environment.NewLine); 
-                                                                                                       in ())
+                                                        p.OutputDataReceived.Add(
+                                                                fun (args) ->
+                                                                if ((args.Data <>"") && (args.Data <> System.Environment.NewLine)) then let x = parsedFile.Append(sprintf """%s%s""" args.Data System.Environment.NewLine) in () 
+                                                                )
                                                         let res = p.Start()
                                                         p.BeginOutputReadLine() 
                                                         //read the output stream
                                                         //let parsedScribble = p.StandardOutput.ReadToEnd();
                                                         p.WaitForExit()
-                                                        let parsedScribble = parsedFile.ToString()
+                                                        // Fix teh parser not to care about starting/trailing spaces!
+                                                        let parsedScribble = parsedFile.ToString().Replace("\r\n\r\n", "\r\n")
                                                         let str = sprintf """{"code":"%s","proto":"%s","role":"%s"}""" "code" protocol localRole
                                                         match Parsing.getFSMJson parsedScribble str with 
                                                             | Some parsed -> parsed

@@ -1,22 +1,22 @@
 module Fib;
 
-
-type <java> "java.lang.Integer" from "rt.jar" as Int;
+type <java> "java.lang.Integer" from "rt.jar" as int;
 
 
 global protocol Adder(role C, role S)
 {
-	HELLO(Int, Int) from C to S;
+	
+	HELLO(x:int) from C to S; @((x<10) && (x<10));
 
 	choice at C
 	{
-		ADD(Int,Int) from C to S;
-		RES(Int) from S to C; 
-		do Adder(C, S); 
+		ADD(int) from C to S;
+		RES(int) from S to C;
+		do Adder(C, S);
 	}
-	or
+	or 
 	{
 		BYE() from C to S;
 		BYE() from S to C;
-	}
+	}	
 }
