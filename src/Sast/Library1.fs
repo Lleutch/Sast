@@ -95,7 +95,13 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
                     |> addIncludedTypeToProvidedType list1
                     |> addIncludedTypeToProvidedType listTypes
                     //|> addProvidedTypeToAssembly
+        
         let assemblyPath = Path.ChangeExtension(System.IO.Path.GetTempFileName(), ".dll")
+        printfn "Path = %A " assemblyPath
+        printfn "%A" (System.Reflection.Assembly.GetCallingAssembly())
+        printfn "%A" (System.Reflection.Assembly.GetEntryAssembly())
+        printfn "%A" (System.Reflection.Assembly.GetExecutingAssembly())
+//        printfn "%A" (System.Reflection.Assembly.LoadFrom())
         let assembly = ProvidedAssembly assemblyPath
         ty.SetAttributes(TypeAttributes.Public ||| TypeAttributes.Class)
         ty.HideObjectMethods <- true
