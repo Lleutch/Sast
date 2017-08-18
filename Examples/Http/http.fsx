@@ -1,7 +1,7 @@
 #r "../../src/Sast/bin/Debug/Sast.dll"
 
 open System
-open GenerativeTypeProviderExample
+open ScribbleGenerativeTypeProvider
 
 
 [<Literal>]
@@ -27,7 +27,9 @@ type Http = Provided.TypeProviderFile<"../../../Examples/Http/http.scr"
                                       ,"S"
                                       ,"../../../Examples/Http/http.yaml"
                                       ,Delimiter=delims
-                                      ,TypeAliasing = typeAliasing>
+                                      ,TypeAliasing = typeAliasing  
+                                      ,ScribbleSource = ScribbleSource.WebAPI>
+
 
 let bufs = new DomainModel.Buf<string>()
 let bufb = new DomainModel.Buf<byte[]>()

@@ -16,7 +16,7 @@ open Microsoft.FSharp.Reflection
 open ProviderImplementation.ProvidedTypes
 
 module internal Debug = 
-
+   
     /// Simulates a real instance of TypeProviderConfig and then creates an instance of the last
     /// type provider added to a namespace by the type provider constructor
     let generate (resolutionFolder: string) (runtimeAssembly: string) typeProviderForNamespacesConstructor args =

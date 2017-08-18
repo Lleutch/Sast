@@ -1,4 +1,4 @@
-﻿module GenerativeTypeProviderExample.DomainModel
+﻿module ScribbleGenerativeTypeProvider.DomainModel
 
 open System.Threading
 open FSharp.Configuration
@@ -34,7 +34,7 @@ type Message =
     
 
 // TYPE PROVIDER'S ASSEMBLY (for generative type provider) + NAMESPACE + BASETYPE 
-let internal ns = "GenerativeTypeProviderExample.Provided"
+let internal ns = "ScribbleGenerativeTypeProvider.Provided"
 //let asm = ProvidedAssembly(Path.ChangeExtension(Path.GetTempFileName(), ".dll"))
 //let baseType = typeof<obj>
 
@@ -58,7 +58,11 @@ let metaYaml = "Partners:
 LocalRole:
   Name: Me
   IP: 127.0.0.1
-  Port: 5000 "
+  Port: 5000 
+
+ScribblePath:
+   FileName: scribbleScriptfile   
+"
 
 type ConfigFile = YamlConfig<YamlText=metaYaml>
 let config = ConfigFile()

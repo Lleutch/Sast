@@ -1,4 +1,4 @@
-﻿module GenerativeTypeProviderExample.TypeGeneration
+﻿module ScribbleGenerativeTypeProvider.TypeGeneration
 
 // Outside namespaces and modules
 open Microsoft.FSharp.Quotations
@@ -9,9 +9,9 @@ open System.Text
 open FSharp.Quotations.Evaluator
 
 // ScribbleProvider specific namespaces and modules
-open GenerativeTypeProviderExample.DomainModel
-open GenerativeTypeProviderExample.CommunicationAgents
-open GenerativeTypeProviderExample.IO
+open ScribbleGenerativeTypeProvider.DomainModel
+open ScribbleGenerativeTypeProvider.CommunicationAgents
+open ScribbleGenerativeTypeProvider.IO
 
 (******************* TYPE PROVIDER'S HELPERS *******************)
 
@@ -228,7 +228,7 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
             match choiceIter with
             |i when i <= TypeChoices.NUMBER_OF_CHOICES ->   
                 let assem = typeof<TypeChoices.Choice1>.Assembly
-                let typeCtor = assem.GetType("GenerativeTypeProviderExample.TypeChoices+Choice" + i.ToString())
+                let typeCtor = assem.GetType("ScribbleGenerativeTypeProvider.TypeChoices+Choice" + i.ToString())
                 //mapping <- mapping.Add("Choice"+ string event.CurrentState,typeCtor)
                 //listeType <- typeCtor::listeType 
                 choiceIter <- choiceIter + 1
@@ -804,3 +804,6 @@ let internal makeRoleList (fsmInstance:ScribbleProtocole.Root []) =
         if not(setSeen |> contains <| event.Partner) then
             setSeen <- setSeen.Add(event.Partner)
             yield event.Partner] 
+
+
+

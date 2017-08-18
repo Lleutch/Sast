@@ -1,20 +1,28 @@
-﻿namespace GenerativeTypeProviderExample
+﻿namespace ScribbleGenerativeTypeProvider
 
 // Outside namespaces and modules
 open FSharp.Core.CompilerServices
 open Microsoft.FSharp.Quotations
 open ProviderImplementation.ProvidedTypes // open the providedtypes.fs file
 open System.Reflection // necessary if we want to use the f# assembly
+open System.Diagnostics
 open System.IO
 open FSharp.Data
 open FSharp.Configuration
 // ScribbleProvider specific namespaces and modules
-open GenerativeTypeProviderExample.TypeGeneration
-open GenerativeTypeProviderExample.DomainModel
-open GenerativeTypeProviderExample.CommunicationAgents
-open GenerativeTypeProviderExample.Regarder
+open ScribbleGenerativeTypeProvider.TypeGeneration
+open ScribbleGenerativeTypeProvider.DomainModel
+open ScribbleGenerativeTypeProvider.CommunicationAgents
+open ScribbleGenerativeTypeProvider.Regarder
+open ScribbleGenerativeTypeProvider.AsstScribbleParser
 open System.Text.RegularExpressions
+open System.Text
 
+
+type ScribbleSource = 
+    | WebAPI = 0 
+    | File = 1
+    | LocalExecutable = 2
 
 [<TypeProvider>]
 type GenerativeTypeProvider(config : TypeProviderConfig) as this =
@@ -27,7 +35,6 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
         let configFilePath = parameters.[0]  :?> string
         let delimitaters = parameters.[1]  :?> string
         let typeAliasing = parameters.[2] :?> string
-
 
         let fsm = 
             let aliases = DotNetTypesMapping.Parse(typeAliasing)
@@ -120,31 +127,97 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
         let file = parameters.[0] :?> string
         let protocol = parameters.[1] :?> string
         let localRole = parameters.[2] :?> string
+        let configFilePath = parameters.[3] :?> string
+
+        let naming = __SOURCE_DIRECTORY__ + configFilePath
+        DomainModel.config.Load(naming)
+
+        let scribbleSource = parameters.[6] :?> ScribbleSource
 
         let relativePath = __SOURCE_DIRECTORY__ + file
-        let code =
-            match (File.Exists(file) , File.Exists(relativePath)) with
+
+        let pathToFile = match File.Exists(file) with 
+                        | true -> file 
+                        | false -> match File.Exists(relativePath) with 
+                                    | true -> relativePath
+                                    | false -> failwith "The given file does not exist"
+        let code = File.ReadAllText(pathToFile)
+
+        (*    match (File.Exists(file) , File.Exists(relativePath)) with
             | true , false -> File.ReadAllText(file)
             | false , true -> File.ReadAllText(relativePath)                               
             | true , true -> File.ReadAllText(relativePath)
             | false, false ->  
                 File.ReadAllText(relativePath)
+        *)
 
-        let str = code.ToString()
-        let replace0 = System.Text.RegularExpressions.Regex.Replace(str,"(\s{2,}|\t+)"," ") 
-        let replace2 = System.Text.RegularExpressions.Regex.Replace(replace0,"\"","\\\"")
-        let str = 
-            sprintf """{"code":"%s","proto":"%s","role":"%s"}""" replace2 protocol localRole
-
-        let fsm = FSharp.Data.Http.RequestString("http://localhost:8083/graph.json", 
+        let fsm = match scribbleSource with 
+                    | ScribbleSource.WebAPI ->  
+                                                let str = code.ToString()
+                                                let replace0 = System.Text.RegularExpressions.Regex.Replace(str,"(\s{2,}|\t+)"," ") 
+                                                let replace2 = System.Text.RegularExpressions.Regex.Replace(replace0,"\"","\\\"")
+                                                let str = sprintf """{"code":"%s","proto":"%s","role":"%s"}""" replace2 protocol localRole
+                                                FSharp.Data.Http.RequestString("http://localhost:8083/graph.json", 
                                                     query = ["json",str] ,
                                                     headers = [ FSharp.Data.HttpRequestHeaders.Accept HttpContentTypes.Json ],
                                                     httpMethod = "GET" )
+                    |ScribbleSource.File -> let parsedScribble = code.ToString()
+                                            let str = sprintf """{"code":"%s","proto":"%s","role":"%s"}""" "code" protocol localRole
+                                            match Parsing.getFSMJson parsedScribble str with 
+                                                | Some parsed -> parsed
+                                                | None -> failwith "The file given does not contain a valid fsm"
+                    |ScribbleSource.LocalExecutable ->  let p = new Process();
+                                                        //redirect the output stream
+                                                        let scribbleScript = "cmd.exe"
+                                                        let batFile = DomainModel.config.ScribblePath.FileName 
+                                                        p.StartInfo.UseShellExecute <- false;
+                                                        p.StartInfo.RedirectStandardOutput <- true;
+                                                        p.StartInfo.FileName <- scribbleScript
+                                                        p.StartInfo.CreateNoWindow <- true
+
+                                                        //let scribbleArgs = sprintf """/C %s %s -fsm %s %s""" batFile pathToFile protocol localRole
+                                                        let scribbleArgs = sprintf """/C %s %s -ass %s -ass-fsm %s""" batFile pathToFile protocol localRole
+                                                        p.StartInfo.Arguments <- scribbleArgs
+                                                        let parsedFile = new StringBuilder()
+                                                        p.OutputDataReceived.Add(
+                                                                fun (args) ->
+                                                                if ((args.Data <>"") && (args.Data <> System.Environment.NewLine)) then let x = parsedFile.Append(sprintf """%s%s""" args.Data System.Environment.NewLine) in () 
+                                                                )
+                                                        let res = p.Start()
+                                                        p.BeginOutputReadLine() 
+                                                        //read the output stream
+                                                        //let parsedScribble = p.StandardOutput.ReadToEnd();
+                                                        p.WaitForExit()
+                                                        // Fix teh parser not to care about starting/trailing spaces!
+                                                        let parsedScribble = parsedFile.ToString().Replace("\r\n\r\n", "\r\n")
+                                                        let str = sprintf """{"code":"%s","proto":"%s","role":"%s"}""" "code" protocol localRole
+                                                        match Parsing.getFSMJson parsedScribble str with 
+                                                            | Some parsed -> parsed
+                                                            | None -> failwith "The file given does not contain a valid fsm"
+                    
+
+        (* Enable this after you add WebAPI option
+        let str = code.ToString()
+        let replace0 = System.Text.RegularExpressions.Regex.Replace(str,"(\s{2,}|\t+)"," ") 
+        let replace2 = System.Text.RegularExpressions.Regex.Replace(replace0,"\"","\\\"")*)
+        (*let parsedScribble = code.ToString()
+        let str = 
+            sprintf """{"code":"%s","proto":"%s","role":"%s"}""" "code" protocol localRole*)
+
+        (*let fsm = FSharp.Data.Http.RequestString("http://localhost:8083/graph.json", 
+                                                    query = ["json",str] ,
+                                                    headers = [ FSharp.Data.HttpRequestHeaders.Accept HttpContentTypes.Json ],
+                                                    httpMethod = "GET" )*)
+        //let parsedScribble = File.ReadAllText("C:/Users/rn710/Repositories/scribble-java/MyLog.txt")
+
+        (*let fsm = match Parsing.getFSMJson parsedScribble str with 
+                    | Some parsed -> parsed
+                    | None -> ""*)
 
         let size = parameters.Length
         generateTypes fsm name parameters.[3..(size-1)]
     
-    //let basePort = 5000
+    //let basePort = 5000       
             
     let providedTypeFSM = TypeGeneration.createProvidedType tmpAsm "TypeProviderFSM"
     let providedTypeFile = TypeGeneration.createProvidedType tmpAsm "TypeProviderFile"
@@ -162,7 +235,8 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
                           ProvidedStaticParameter("Role",typeof<string>);
                           ProvidedStaticParameter("Config",typeof<string>);
                           ProvidedStaticParameter("Delimiter",typeof<string>);
-                          ProvidedStaticParameter("TypeAliasing",typeof<string>)]
+                          ProvidedStaticParameter("TypeAliasing",typeof<string>); 
+                          ProvidedStaticParameter("ScribbleSource",typeof<ScribbleSource>); ]
                          (* ProvidedStaticParameter("SerializeMessagePath",typeof<string*string>);
                           ProvidedStaticParameter("DeserializeMessagePath",typeof<string*string>);
                           ProvidedStaticParameter("DerializeChoicePath",typeof<string*string>)]*)
