@@ -26,14 +26,13 @@ type IOFailures =
 
 // Helpers to write and read bytes with the help of delims
 let toBytes (str : string) =
-    result{
-        try
-            let encoder = new UTF8Encoding()
-            return encoder.GetBytes(str)
-        with
-        | e -> 
-            return! Encoding (str,e) |> createFailure
-    }
+    try
+        let encoder = new UTF8Encoding()
+        encoder.GetBytes(str)
+    with
+    | e -> 
+        Encoding (str,e) |> createFailure
+
 //
 //let writeBytes (outputStream : Stream) (buf : byte[])  =
 //    let dos = new BinaryWriter(outputStream)
@@ -43,11 +42,9 @@ let toBytes (str : string) =
 // Currently only working for basic types.
 // Need to find a better way to handle IO properly!!
 let serLabel (label:string) (delim:string) =
-        result{
-            let! labelBytes = label |> toBytes
-            let! delimBytes = delim |> toBytes
-            return delimBytes |> Array.append labelBytes
-        }
+    let labelBytes = label |> toBytes
+    let delimBytes = delim |> toBytes
+    delimBytes |> Array.append labelBytes
 
 let serPayloads (args:Expr list) (listTypes:string list) (payloadDelim:string) (endDelim:string) =
     let listPayloads =  
@@ -58,31 +55,27 @@ let serPayloads (args:Expr list) (listTypes:string list) (payloadDelim:string) (
             |"System.String" | "System.Char"-> 
                 <@  
                     let spliced = %%(Expr.Coerce(arg,typeof<obj>))
-                    result{
-                        try
-                            return 
-                                Type.GetType("System.Text.UTF8Encoding")
-                                    .GetMethod("GetBytes",[|Type.GetType(currentType)|])
-                                    .Invoke(new UTF8Encoding(),[|spliced|]) |> unbox<byte []> 
-                        with
-                        | _ -> 
-                            return! SerializationPayload (spliced,currentType) |> createFailure
+                    try
+                        Type.GetType("System.Text.UTF8Encoding")
+                            .GetMethod("GetBytes",[|Type.GetType(currentType)|])
+                            .Invoke(new UTF8Encoding(),[|spliced|]) |> unbox<byte []> 
+                    with
+                    | _ -> 
+                        printing "Failed to serialize 1" ""
+                        SerializationPayload (spliced,currentType) |> createFailure
                             
-                    }
                 @>
             | _ -> 
                 <@ 
                     let spliced = %%(Expr.Coerce(arg,typeof<obj>))
-                    result{
-                        try
-                            return 
-                                Type.GetType("System.BitConverter")
-                                    .GetMethod("GetBytes",[|Type.GetType(currentType)|])
-                                    .Invoke(null,[|spliced|] ) |> unbox<byte []> 
-                        with
-                        | _ -> 
-                            return! SerializationPayload (spliced,currentType) |> createFailure   
-                    }
+                    try
+                        Type.GetType("System.BitConverter")
+                            .GetMethod("GetBytes",[|Type.GetType(currentType)|])
+                            .Invoke(null,[|spliced|] ) |> unbox<byte []> 
+                    with
+                    | _ -> 
+                        printing "Failed to serialize 2" ""
+                        SerializationPayload (spliced,currentType) |> createFailure   
                 @> 
            ) 
 
@@ -100,15 +93,13 @@ let serPayloads (args:Expr list) (listTypes:string list) (payloadDelim:string) (
     listPayloads 
     |> List.fold2 (fun acc f1 f2 -> 
         <@ 
-            result{
-                let! f1 = %f1
-                let! f2 = %f2
-                let! acc = %acc
+            let f1 = %f1
+            let f2 = %f2
+            let acc = %acc
 
-                return Array.append (Array.append acc f1) f2 
-            }
+            Array.append (Array.append acc f1) f2 
         @>
-       ) <@ result{ return [||]} @> <| listDelims
+       ) <@ [||] @> <| listDelims
 
 
 //let serialize (label:string) (args:Expr list) (listTypes:string list) (payloadDelim:string) (endDelim:string) (labelDelim:string) =
@@ -127,31 +118,29 @@ let serialize (label:string) (args:Expr list) (listTypes:string list) (payloadDe
                              
 //    let payloadSerialized = serPayloads args listTypes payloadDelim endDelim 
     <@  
-        result{ 
-            let! payloadSerialized = %( serPayloads args listTypes payloadDelim endDelim )
-            let! labelSerialized  = %(labelSerialized) 
-            return Array.append labelSerialized payloadSerialized 
-        } 
+        printing "About to serialized" ""
+        let payloadSerialized = %( serPayloads args listTypes payloadDelim endDelim )
+        let labelSerialized  = %(labelSerialized) 
+        printing "Serialization done" ""
+        Array.append labelSerialized payloadSerialized 
     @>        
 
 let convert (arrayList:byte[] list) (elemTypelist:string list) =
     let rec aux (arrList:byte[] list) (elemList:string list) (acc:obj list) =
-        result{
-            match arrList with
-                |[] -> return List.rev acc
-                |hd::tl ->  
-                    let sub = elemList.Head.Split('.')
-                    let typing = sub.[sub.Length-1]
-                    try
-                        let mymethod = Type.GetType("System.BitConverter")
-                                           .GetMethod("To"+typing,[|typeof<byte []>;typeof<int>|])
-                        let invoke = mymethod.Invoke(null,[|box hd;box 0|])
-                        return! aux tl (elemList.Tail) (invoke::acc)
-                    with
-                    | e -> 
-                        return! DeserializationConvertion (hd,typing) |> createFailure  
+        match arrList with
+        |[] -> List.rev acc
+        |hd::tl ->  
+            let sub = elemList.Head.Split('.')
+            let typing = sub.[sub.Length-1]
+            try
+                let mymethod = Type.GetType("System.BitConverter")
+                                    .GetMethod("To"+typing,[|typeof<byte []>;typeof<int>|])
+                let invoke = mymethod.Invoke(null,[|box hd;box 0|])
+                aux tl (elemList.Tail) (invoke::acc)
+            with
+            | e -> 
+                DeserializationConvertion (hd,typing) |> createFailure  
                         
-        }
     aux arrayList elemTypelist []
    
 let deserialize (args: Expr list)  (listTypes:string list) (messages: _ list) (role:string) =
@@ -159,15 +148,13 @@ let deserialize (args: Expr list)  (listTypes:string list) (messages: _ list) (r
                     yield Expr.Coerce(elem,typeof<ISetResult>) ]
 
     <@ 
-        result{
-            let result = Regarder.receiveMessage "agent" messages role listTypes 
-            printfn " deserialize Normal : %A || Role : %A || listTypes : %A" messages role listTypes
-            printing " received Bytes: " result
+        let result = Regarder.receiveMessage "agent" messages role listTypes 
+        printfn " deserialize Normal : %A || Role : %A || listTypes : %A" messages role listTypes
+        printing " received Bytes: " result
             
-            let! received = convert (result.Tail) listTypes 
-            let received = List.toSeq received
-            Runtime.setResults received (%%(Expr.NewArray(typeof<ISetResult>, buffer)):ISetResult []) 
-        }
+        let received = convert (result.Tail) listTypes 
+        let received = List.toSeq received
+        Runtime.setResults received (%%(Expr.NewArray(typeof<ISetResult>, buffer)):ISetResult []) 
     @>
                  
 
@@ -179,16 +166,12 @@ let deserializeAsync (args: Expr list)  (listTypes:string list) (messages: _ lis
             async{            
                 let! res = Regarder.receiveMessageAsync "agent" messages role listTypes 
                 let res =
-                    result{
-                        let! received = (res.Tail |> convert <| listTypes )
-                        let received = received |> List.toSeq          
-                        Runtime.setResults received (%%(Expr.NewArray(typeof<ISetResult>, buffer)):ISetResult []) 
-                    }
+                    let received = (res.Tail |> convert <| listTypes )
+                    let received = received |> List.toSeq          
+                    Runtime.setResults received (%%(Expr.NewArray(typeof<ISetResult>, buffer)):ISetResult []) 
                 return res
             }
-        // This modification breaks the "asynchronism that we achieved before"
-        let res = Async.RunSynchronously(work)
-        res
+        Async.Start(work)
      @>
 
 
@@ -196,11 +179,12 @@ let deserializeChoice (args: Expr list) (listTypes:string list) =
     let buffer = [for elem in args do
                     yield Expr.Coerce(elem,typeof<ISetResult>) ]
     <@ 
-        result{
-            let result = Regarder.receiveChoice "agent" 
-            let! received = (result |> convert <| listTypes ) 
-            let received = received |> List.toSeq          
-            //let received = result |> List.toSeq
-            Runtime.setResults received (%%(Expr.NewArray(typeof<ISetResult>, buffer)):ISetResult []) 
-        }
+        let result = Regarder.receiveChoice "agent" 
+        let received = (result |> convert <| listTypes ) 
+        let received = received |> List.toSeq          
+        //let received = result |> List.toSeq
+        let test = (%%(Expr.NewArray(typeof<ISetResult>, buffer)):ISetResult []) 
+        let completed = test |> Array.map(fun t -> t.GetTask())
+        printing "Receive a choice" (received,test,completed)
+        Runtime.setResults received (%%(Expr.NewArray(typeof<ISetResult>, buffer)):ISetResult []) 
     @>

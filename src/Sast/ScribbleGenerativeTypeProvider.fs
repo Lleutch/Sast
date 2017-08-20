@@ -114,7 +114,6 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
         ty.HideObjectMethods <- true
         assembly.AddTypes [ty]
         ty
-  
 
     let createTypeWithFSM (name:string) (parameters:obj[]) =
         let fsm = parameters.[0]  :?> string  (* this is used if we want to assure that the type of the parameter
