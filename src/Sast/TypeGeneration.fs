@@ -693,7 +693,7 @@ let rec addProperties (providedListStatic:ProvidedTypeDefinition list) (provided
                         |"receive" -> goingThrough methodName providedListStatic aType indexList mLabel mRole fsmInstance 
                         |"choice" -> 
                                      let assem = typeof<TypeChoices.Choice1>.Assembly
-                                     let labelType = assem.GetType("GenerativeTypeProviderExample.TypeChoices+Choice" + string currentState)
+                                     let labelType = assem.GetType("ScribbleGenerativeTypeProvider.TypeChoices+Choice" + string currentState)
                                      let tyType = typedefof<_ ResultWrapped>.MakeGenericType(labelType)
 
                                      let event = fsmInstance.[indexOfState]
@@ -739,7 +739,7 @@ let rec addProperties (providedListStatic:ProvidedTypeDefinition list) (provided
                         |"receive" -> goingThrough methodName providedListStatic hd indexList mLabel mRole fsmInstance 
                         |"choice" -> 
                                      let assem = typeof<TypeChoices.Choice1>.Assembly
-                                     let labelType = assem.GetType("GenerativeTypeProviderExample.TypeChoices+Choice" + string currentState)
+                                     let labelType = assem.GetType("ScribbleGenerativeTypeProvider.TypeChoices+Choice" + string currentState)
                                      let tyType = typedefof<_ ResultWrapped>.MakeGenericType(labelType)
 
                                      let event = fsmInstance.[indexOfState]
