@@ -3,3 +3,4 @@ FSharp.Data
 FSharp.TypeProviders.StarterPack
 QuotationCompiler
 FSharp.Quotations.Evaluator
+FParsec
