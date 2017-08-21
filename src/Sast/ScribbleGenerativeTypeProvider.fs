@@ -167,63 +167,35 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
                             | Some parsed -> parsed
                             | None -> failwith "The file given does not contain a valid fsm"
                     |ScribbleSource.LocalExecutable ->  
-                        let p = new Process()
                         //redirect the output stream
-                        let scribbleScript = "cmd.exe"
                         let batFile = DomainModel.config.ScribblePath.FileName 
-                        let tempFileName = Path.GetTempFileName()
-                                                         
-                                                        
-                        // Configure command line
-                        let scribbleArgs = sprintf """/C %s %s -ass %s -ass-fsm %s >> %s 2>&1 """ 
-                                                    batFile pathToFile protocol localRole tempFileName
-                                                        
-                                                        
+                        let tempFileName = Path.GetTempFileName()        
+                        
+                        try                                 
+                            // Configure command line
+                            let scribbleArgs = sprintf """/C %s %s -ass %s -ass-fsm %s >> %s 2>&1 """ 
+                                                        batFile pathToFile protocol localRole tempFileName
 
-                        //let psi = ProcessStartInfo(scribbleScript, scribbleArgs)
-                        //psi.UseShellExecute <- false; psi.CreateNoWindow <- true; 
-
-                        p.StartInfo.UseShellExecute <- false;
-                        //p.StartInfo.RedirectStandardOutput <- true;
-                        p.StartInfo.FileName <- scribbleScript
-                        p.StartInfo.CreateNoWindow <- true
-                        p.StartInfo.Arguments <- scribbleArgs
+                            let psi = ProcessStartInfo("cmd.exe", scribbleArgs)
+                            psi.UseShellExecute <- false; psi.CreateNoWindow <- true; 
                                                             
-                        // Run the cmd process and wait for its completion
-                                                        
-                        let res = p.Start(); 
-                        p.WaitForExit()
+                            // Run the cmd process and wait for its completion
+                            let p = new Process()
+                            p.StartInfo<- psi;                             
+                            let res = p.Start(); 
+                            p.WaitForExit()
 
-                        // Read the result from the executed script
-                                                            
-                        let parsedFile = File.ReadAllText(tempFileName) 
-                        // TODO:  Fix the parser not to care about starting/trailing spaces!
-                        let parsedScribble = parsedFile.ToString().Replace("\r\n\r\n", "\r\n")
-                        let str = sprintf """{"code":"%s","proto":"%s","role":"%s"}""" "code" protocol localRole
+                            // Read the result from the executed script
+                            let parsedFile = File.ReadAllText(tempFileName) 
+                            // TODO:  Fix the parser not to care about starting/trailing spaces!
+                            let parsedScribble = parsedFile.ToString().Replace("\r\n\r\n", "\r\n")
+                            let str = sprintf """{"code":"%s","proto":"%s","role":"%s"}""" "code" protocol localRole
 
-                        if File.Exists(tempFileName) then File.Delete(tempFileName)
-
-                        match Parsing.getFSMJson parsedScribble str with 
-                            | Some parsed -> parsed
-                            | None -> failwith (sprintf "The file given does not contain a valid fsm: %s" parsedScribble)
-
-        (* Enable this after you add WebAPI option
-        let str = code.ToString()
-        let replace0 = System.Text.RegularExpressions.Regex.Replace(str,"(\s{2,}|\t+)"," ") 
-        let replace2 = System.Text.RegularExpressions.Regex.Replace(replace0,"\"","\\\"")*)
-        (*let parsedScribble = code.ToString()
-        let str = 
-            sprintf """{"code":"%s","proto":"%s","role":"%s"}""" "code" protocol localRole*)
-
-        (*let fsm = FSharp.Data.Http.RequestString("http://localhost:8083/graph.json", 
-                                                    query = ["json",str] ,
-                                                    headers = [ FSharp.Data.HttpRequestHeaders.Accept HttpContentTypes.Json ],
-                                                    httpMethod = "GET" )*)
-        //let parsedScribble = File.ReadAllText("C:/Users/rn710/Repositories/scribble-java/MyLog.txt")
-
-        (*let fsm = match Parsing.getFSMJson parsedScribble str with 
-                    | Some parsed -> parsed
-                    | None -> ""*)
+                            match Parsing.getFSMJson parsedScribble str with 
+                                | Some parsed -> parsed
+                                | None -> failwith (sprintf "The file given does not contain a valid fsm: %s" parsedScribble)
+                        finally 
+                            if File.Exists(tempFileName) then File.Delete(tempFileName)
 
         let size = parameters.Length
         generateTypes fsm name parameters.[3..(size-1)]
