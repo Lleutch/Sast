@@ -170,26 +170,35 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
                                                         let scribbleScript = "cmd.exe"
                                                         let batFile = DomainModel.config.ScribblePath.FileName 
                                                         p.StartInfo.UseShellExecute <- false;
-                                                        p.StartInfo.RedirectStandardOutput <- true;
+                                                        //p.StartInfo.RedirectStandardOutput <- true;
                                                         p.StartInfo.FileName <- scribbleScript
                                                         p.StartInfo.CreateNoWindow <- true
 
                                                         //let scribbleArgs = sprintf """/C %s %s -fsm %s %s""" batFile pathToFile protocol localRole
-                                                        let scribbleArgs = sprintf """/C %s %s -ass %s -ass-fsm %s""" batFile pathToFile protocol localRole
+                                                        let tempFileName = sprintf """%s\temp%s.txt""" 
+                                                                                (System.Environment.CurrentDirectory) 
+                                                                                (System.Environment.TickCount.ToString())
+                                                        let scribbleArgs = sprintf """/C %s %s -ass %s -ass-fsm %s >> %s 2>&1 """ 
+                                                                                    batFile pathToFile protocol localRole tempFileName
+                                                        
                                                         p.StartInfo.Arguments <- scribbleArgs
-                                                        let parsedFile = new StringBuilder()
+                                                        let res = p.Start()
+                                                        (*let parsedFile = new StringBuilder()
                                                         p.OutputDataReceived.Add(
                                                                 fun (args) ->
                                                                 if ((args.Data <>"") && (args.Data <> System.Environment.NewLine)) then let x = parsedFile.Append(sprintf """%s%s""" args.Data System.Environment.NewLine) in () 
                                                                 )
                                                         let res = p.Start()
-                                                        p.BeginOutputReadLine() 
+                                                        p.BeginOutputReadLine()*) 
                                                         //read the output stream
                                                         //let parsedScribble = p.StandardOutput.ReadToEnd();
                                                         p.WaitForExit()
-                                                        // Fix teh parser not to care about starting/trailing spaces!
+                                                        // Fix the parser not to care about starting/trailing spaces!
+                                                        let parsedFile = File.ReadAllText(tempFileName) 
                                                         let parsedScribble = parsedFile.ToString().Replace("\r\n\r\n", "\r\n")
                                                         let str = sprintf """{"code":"%s","proto":"%s","role":"%s"}""" "code" protocol localRole
+                                                        
+                                                        File.Delete(tempFileName)
                                                         match Parsing.getFSMJson parsedScribble str with 
                                                             | Some parsed -> parsed
                                                             | None -> failwith "The file given does not contain a valid fsm"
