@@ -29,25 +29,23 @@ let numIter = 8
 let S = Fib.S.instance
 
 let rec fibrec a b iter (c0:Fib.State7) =
-        result{
             let res = new DomainModel.Buf<int>()
             printfn "number of iter: %d" (numIter - iter)
-            let! c = c0.sendHELLO(S, a)
+            let c = c0.sendHELLO(S, a)
             match iter with
                 |0 -> 
-                    let! c1 = c.sendBYE(S)
-                    let! c2 = c1.receiveBYE(S)
-                    let! c3 = c1.receiveBYE(S) 
-                    return c2.finish()
+                    let c1 = c.sendBYE(S)
+                    let c2 = c1.receiveBYE(S)
+                    let c3 = c1.receiveBYE(S) 
+                    c2.finish()
                 |n -> 
-                    let! c1 = c.sendADD(S, a)
-                    let! c2 = c1.receiveRES(S, res)
+                    let c1 = c.sendADD(S, a)
+                    let c2 = c1.receiveRES(S, res)
 
                     printfn "Fibo : %d" (res.getValue())
                     Async.RunSynchronously(Async.Sleep(1000))
 
-                    return! fibrec b (res.getValue()) (n-1) c2
-        }
+                    fibrec b (res.getValue()) (n-1) c2
 
 let fibo = new Fib()
 let first = fibo.Start()

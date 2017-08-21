@@ -54,7 +54,7 @@ let internal isInOne (weirdList: string list list) (str:string) =
                            aux tl
     aux weirdList
 
-let internal readLab (s : Stream) (labels : byte[] list) =
+let internal readLab (s : NetworkStream) (labels : byte[] list) =
     printing  "Inside read Label function" ""
     let listsDelim = moreLists labels
     printing  "getting delimiters" ""
@@ -63,7 +63,7 @@ let internal readLab (s : Stream) (labels : byte[] list) =
     let dis = new BinaryReader(s)
     printing  "Reading Label :" ""
     let rec aux acc = 
-        printing  "Aux :" acc
+        printing  "Aux :" (acc,s.DataAvailable,s.ReadTimeout,s)
         let tmp = dis.ReadByte()
         printing  "Aux : Read byte :" tmp
         let value = decode.GetString([|tmp|])
@@ -246,9 +246,19 @@ type AgentReceiver(ipAddress,port) =
                     let stream = clientMap.["hey"]
                     // DESERIALIZER BIEN LA
                     let decode = new System.Text.UTF8Encoding()
-                    printing "Wait Read Label" ""
-                    let (label,delim) = readLab stream message
-                    printing " Label Read :" (label,delim,message)
+                    printing "Wait Read Label" stream.DataAvailable
+                    let mutable succeed = false
+                    let (label,delim) = 
+                        try 
+                            printing "INSIDE the TRY WITH for readLab:" message
+                            let res = readLab stream message
+                            succeed <- true
+                            res
+                        with
+                        | e -> 
+                            succeed <- false
+                            [||],[||]
+                    printing " Label Read :" (label,delim,message,succeed)
                     match label with
                     |msg when (message |> isIn <| (Array.append msg delim) ) |> not -> 
                         printing "wrong label read :" (label,message)
@@ -267,6 +277,10 @@ type AgentReceiver(ipAddress,port) =
         in loop()
  
     let mutable agentReceiver = None
+
+    do 
+        printing "Current Address IP :" (IPAddress.Parse(ipAddress),ipAddress,port)
+
    
     member this.Start()=
         server.Start()

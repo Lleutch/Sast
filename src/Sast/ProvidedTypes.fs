@@ -2301,7 +2301,7 @@ type AssemblyGenerator(assemblyFileName) =
                                 ilg.Emit(OpCodes.Newobj, Misc.TimeSpanConstructor)
                                 ilg.Emit(OpCodes.Newobj, Misc.DateTimeOffsetConstructor)
                             | null -> ilg.Emit(OpCodes.Ldnull)
-                            | _ -> failwithf "unknown constant '%A' in generated method : type of constant %A not supported" v (v.GetType().FullName)
+                            | _ -> failwithf "unknown constant '%A' in generated method" v
                         if isEmpty expectedState then ()
                         else emitC obj
 
