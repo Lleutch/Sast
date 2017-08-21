@@ -5,12 +5,12 @@ type <java> "java.lang.Integer" from "rt.jar" as int;
 
 global protocol Adder(role C, role S)
 {
-	HELLO(x:int) from C to S;
+	HELLO(int) from C to S; 
 
 	choice at C
 	{
-		ADD(int) from C to S;
-		RES(int) from S to C;
+		ADD(x:int) from C to S; 
+		RES(z:int) from S to C;
 		do Adder(C, S);
 	}
 	or
