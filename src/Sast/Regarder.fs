@@ -1,10 +1,11 @@
 ﻿module ScribbleGenerativeTypeProvider.Regarder 
 
+open ProviderImplementation.ProvidedTypes
 open ScribbleGenerativeTypeProvider.CommunicationAgents
 
 let mutable dico = Map.empty<string,AgentRouter>
 let mutable changed = false
-let mutable mLabel = Map.empty<string,System.Type>
+let mutable mLabel = Map.empty<string,ProvidedTypeDefinition>
 
 let ajouter str agent =
     if not(changed) then
@@ -15,6 +16,8 @@ let ajouterLabel mapping =
     mLabel <- mapping
 
 let getLabelType (labelRead:string) =
+    printfn "getLabelType : %A" (mLabel,labelRead) 
+     
     mLabel.[labelRead]
 
 let startAgentRouter agent =

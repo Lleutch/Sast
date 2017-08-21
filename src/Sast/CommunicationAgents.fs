@@ -12,17 +12,36 @@ open ScribbleGenerativeTypeProvider.DomainModel
 open System.Collections.Generic
 
 
-exception TooManyTriesError of string
 
+let printing message data =
+    let doPrinting = true
+    if doPrinting then
+        printfn "%s %A" message data
+
+exception TooManyTriesError of string
 
 let internal moreLists (labels:byte[] list) =
     let rec aux acc (list1 : byte[] list) =
         match list1 with
             |[] -> acc
-            |hd::tl -> let encode = new System.Text.UTF8Encoding()
-                       let str = encode.GetString(hd)
-                       let listDelim,_,_ = DomainModel.mappingDelimitateur.[str]
+            |hd::tl -> printing "LOOP :" hd
+                       let encode = new System.Text.UTF8Encoding()
+                       printing  "LOOP : Encoding :" encode
+                       // TODO : FIX Num 1 TMP
+                       let str1 = encode.GetString(hd.[0..hd.Length-2])
+                       let str2 = encode.GetString(hd)
+                       printing  "LOOP : GetString : " (str1,str2)
+                       printing  "MAP : " DomainModel.mappingDelimitateur
+                       let tryDelims1 = DomainModel.mappingDelimitateur.TryFind str1
+                       let tryDelims2 = DomainModel.mappingDelimitateur.TryFind str2
+                       let listDelim,_,_ =
+                           match tryDelims1, tryDelims2 with
+                           | None , Some delims -> delims
+                           | Some delims , None -> delims
+                           | _ , _ -> failwith (sprintf "Error with delimitations : For the moment avoid to have a label equal to a label + delimiter \n Example : %s AND %s" str1 str2)
+                       printfn "LOOP : Get Delims"
                        aux (listDelim::acc) tl
+    printing  "Labels :" labels
     aux [] labels
 
 let internal isInOne (weirdList: string list list) (str:string) =
@@ -36,29 +55,49 @@ let internal isInOne (weirdList: string list list) (str:string) =
     aux weirdList
 
 let internal readLab (s : Stream) (labels : byte[] list) =
+    printing  "Inside read Label function" ""
     let listsDelim = moreLists labels
+    printing  "getting delimiters" ""
     let decode = new UTF8Encoding()
+    printing  "getting delimiters and encoding" ""
     let dis = new BinaryReader(s)
-    printfn "Reading Label :"
+    printing  "Reading Label :" ""
     let rec aux acc = 
+        printing  "Aux :" acc
         let tmp = dis.ReadByte()
+        printing  "Aux : Read byte :" tmp
         let value = decode.GetString([|tmp|])
-        value |> printfn "%s %A" <| tmp
+        printing "Aux : Decode :" value
+        printing value tmp
+        printing "Aux : After printing" ""
         if (isInOne listsDelim value) then
-            acc
+            // TODO : FIX Num 2 TMP
+            (acc,[|tmp|])
         else
             aux (Array.append acc [|tmp|])
+    printing  "Read Real Label :" ""
     aux [||]
 
 let readPay (s:Stream) (label:string) = 
-    let _,listDelPay,listDelEnd = DomainModel.mappingDelimitateur.[label]
+    // TODO : FIX Num 3 TMP
+    let str1 = label.[0..(label.Length-2)] 
+    let str2 = label
+    let tryDelims1 = DomainModel.mappingDelimitateur.TryFind str1
+    let tryDelims2 = DomainModel.mappingDelimitateur.TryFind str2
+    printing "Reading payloads : Mapping Delims = %A" (DomainModel.mappingDelimitateur,str1,str2) 
+    let _,listDelPay,listDelEnd = 
+        match tryDelims1, tryDelims2 with
+        | None , Some delims -> delims
+        | Some delims , None -> delims
+        | _ , _ -> failwith (sprintf "Error with delimitations : For the moment avoid to have a label equal to a label + delimiter \n Example : %s AND %s" str1 str2)
+
     let dis = new BinaryReader(s)
     let decode = new UTF8Encoding()
-    printfn "Reading payloads :"
+    printing "Reading payloads :" ""
     let rec aux accList accArray =
         let tmp = dis.ReadByte()
         let value = decode.GetString([|tmp|])
-        value |> printfn "%s %A" <| tmp
+        printing value tmp
         if (List.exists (fun elem -> elem = value) listDelEnd) then 
             (accArray::accList) |> List.rev 
         elif (List.exists (fun elem -> elem = value) listDelPay) then 
@@ -66,33 +105,6 @@ let readPay (s:Stream) (label:string) =
         else
             aux accList (Array.append accArray [|tmp|])
     in aux [] [||]
-
-
-
-let internal readPayloads (s : Stream) (payloadTypes : string list) (label:string)=
-    let _,listDel1,listDel2 = DomainModel.mappingDelimitateur.[label]
-    let dis = new BinaryReader(s)
-    let rec aux acc (acc1 : byte[]) (listPayload: string list) counter =
-        let tmp = dis.ReadByte()
-        let value = tmp.ToString()
-        if (List.exists (fun elem -> elem = value) listDel2) then 
-            if not(counter = payloadTypes.Length) then
-                failwith (sprintf "The number of payload read is not correct, read %d instead of %d" counter payloadTypes.Length )
-            else
-                List.rev acc
-        elif (List.exists (fun elem -> elem = value) listDel1) then
-            if listPayload=[] then
-                failwith (sprintf "The number of payload received is too big. Should have received %d" payloadTypes.Length)
-            else
-                let sizeExpected = System.Runtime.InteropServices.Marshal.SizeOf(System.Type.GetType(listPayload.Head))
-                let sizeReal = acc1.Length
-                if sizeExpected = sizeReal then
-                    aux (acc1::acc) [||] (listPayload.Tail) (counter+1)
-                else
-                    failwith (sprintf "Expected a payload of type %s but received something different" (listPayload.Head))
-        else
-            aux acc (Array.append acc1 [|tmp|]) listPayload counter
-    aux [] [||] payloadTypes 0
 
 
 type AgentSender(ipAddress,port) =
@@ -142,8 +154,9 @@ type AgentSender(ipAddress,port) =
                     () // Raise an exception Error due to bad coding in the type provider
                     return! loop()      
                 |SendMessage (message,role) -> // The serialization is done before
-                    printfn "SENDING THE MESSAGE : %A" (Array.toList message)
+                    printing "Send Message :" (Array.toList message)
                     do! stream.AsyncWrite(message)
+                    printing "Message Sent via TCP" ""
                     return! loop()
             }
         in loop()
@@ -151,9 +164,12 @@ type AgentSender(ipAddress,port) =
     let mutable agentSender = None 
 
     member this.SendMessage(message) =
+        printing "Send Message : About to send" ""
         match (agentSender:Option<Agent<Message>>) with
             |None -> () // Raise an exception Error due to using this method before the Start method in the type provider 
-            |Some sending -> sending.Post(Message.SendMessage message)
+            |Some sending -> 
+                printing "Send Message : post to actor loop" ""
+                sending.Post(Message.SendMessage message)
 
     member this.Start() = // Raise an exception due to trying to connect and parsing the IPAddress
         let tcpClientSend = new TcpClient()
@@ -188,7 +204,7 @@ type AgentReceiver(ipAddress,port) =
             let readRole = "hey"//readAllBytes stream
             // CHANGE ABOVE BY READING THE ROLE IN ANOTHER Map<role:string,(IP,PORT)>
             clientMap <- clientMap.Add(readRole,stream)
-            printfn " SIZE %d %s " clientMap.Count readRole
+            printing " SIZE :" (clientMap.Count,readRole)
             return! loop()
             }
         in loop()
@@ -216,25 +232,32 @@ type AgentReceiver(ipAddress,port) =
                     let stream = clientMap.[fakeRole]
                     // DESERIALIZER BIEN LA
                     let decode = new System.Text.UTF8Encoding()
-                    let label = readLab stream message
+                    let (label,delim) = readLab stream message
                     match label with
-                        |msg when (message |> isIn <| msg) |> not -> failwith "Received a wrong Label, that doesn't belong to the possible Labels at this state"
+                        |msg when (message |> isIn <| (Array.append msg delim) ) |> not -> failwith "Received a wrong Label, that doesn't belong to the possible Labels at this state"
                         | _ ->  let payloads = readPay stream (decode.GetString(label))
                                 let list1 = label::payloads
                                 channel.Reply(list1)
                     return! loop()
                 |ReceiveMessage (message,role,listTypes,channel) ->
+                    printing "Check ClientMap :" clientMap
                     if not(clientMap.ContainsKey("hey")) then
                         waitForCancellation "hey" 50 |> ignore // Change the number
                     let stream = clientMap.["hey"]
                     // DESERIALIZER BIEN LA
                     let decode = new System.Text.UTF8Encoding()
-                    let label = readLab stream message
+                    printing "Wait Read Label" ""
+                    let (label,delim) = readLab stream message
+                    printing " Label Read :" (label,delim,message)
                     match label with
-                        |msg when (message |> isIn <| msg) |> not -> failwith "Received a wrong Label, that doesn't belong to the possible Labels at this state"
-                        | _ ->  let payloads = readPay stream (decode.GetString(label))
-                                let list1 = label::payloads
-                                channel.Reply(list1)
+                    |msg when (message |> isIn <| (Array.append msg delim) ) |> not -> 
+                        printing "wrong label read :" (label,message)
+                        failwith "Received a wrong Label, that doesn't belong to the possible Labels at this state"
+                    | _ ->  printing "Read Payload" ""
+                            let payloads = readPay stream (decode.GetString(label))
+                            let list1 = label::payloads
+                            printing "Before Reply on channel" ""
+                            channel.Reply(list1)
                     (*let dis = new BinaryReader(stream)
                     let c = dis.ReadBytes(4)
                     channel.Reply([c])*)
@@ -269,7 +292,9 @@ type AgentReceiver(ipAddress,port) =
         System.Console.WriteLine("RECEIVING...")
         let (msg,role,listTypes,ch) = message
         match agentReceiver with
-            |Some receive -> receive.PostAndReply(fun channel -> Message.ReceiveMessage (msg,role,listTypes,channel))
+            |Some receive -> 
+                printfn "Wait Reply"
+                receive.PostAndReply(fun channel -> Message.ReceiveMessage (msg,role,listTypes,channel))
             |None -> failwith " agent not instanciated yet"
                      
 
@@ -285,16 +310,23 @@ type AgentRouter(agentMap:Map<string,AgentSender>,agentReceiving:AgentReceiver) 
             let! msg = agentRouter.Receive()
             match msg with
                 |SendMessage (message,role) ->
+                    printing "SendMessage : Agent Mapping = " agentMapping  
                     let agentSender = agentMapping.[role]
+                    printing "Got the correct agent" ""
                     agentSender.SendMessage(message,role) // Here, message is the serialized message that needs to be sent
+                    printing "Sent the message to the correct the agent that will use tcp" ""
                     return! loop()
                 |ReceiveMessageAsync (message,role,listTypes,channel) -> 
+                    printing "Receives Message Async : send to Agent" ""
                     agentReceiver.ReceiveMessageAsync(message,role,listTypes,channel) // Be Carefull: message is the serialized version of the Type
                                                                                            // While replyMessage is the message really received from the network 
                     return! loop()
                 |ReceiveMessage (message,role,listTypes,channel) -> 
+                    printing "Receives Message : send to Agent" ""
                     let message = agentReceiver.ReceiveMessage(message,role,listTypes,channel) // Be Carefull: message is the serialized version of the Type
+                    printing "Receives Message : reply to channel" ""
                     channel.Reply(message)                                                                                   // While replyMessage is the message really received from the network 
+                    printing "Receives Message : replied to channel" ""
                     return! loop()
             }
         in loop()
@@ -307,6 +339,7 @@ type AgentRouter(agentMap:Map<string,AgentSender>,agentReceiving:AgentReceiver) 
             sender.Value.Start()
                
     member this.SendMessage(message) =
+        printing "SendMessage : Post to the write role = " message
         agentRouter.Post(Message.SendMessage message)
    
     member this.ReceiveMessage(message) =
@@ -320,7 +353,8 @@ type AgentRouter(agentMap:Map<string,AgentSender>,agentReceiving:AgentReceiver) 
         let replyMessage = agentRouter.PostAndAsyncReply(fun channel -> Message.ReceiveMessageAsync (msg,role,listTypes,channel))
         replyMessage            
 
-    member this.ReceiveChoice()=
+    member this.ReceiveChoice() =
+        printing "Go through A choice!!!" ""
         payloadChoice
         
 
@@ -348,11 +382,15 @@ let createRouter (configInfos:ConfigFile) (listRoles:string list) =
     let lengthList = listRoles.Length
     let configSize = configInfos.Partners.Count + 1
     match (configSize = lengthList) with
-        | false -> failwith "you don't have the correct number of roles in the YAML Configuration file"
-        | true ->
-            match (listRoles |> isIn <| configInfos.LocalRole.Name) with
-                |false -> failwith (sprintf "The following local role : %s from the config file doesn't belong to the protocol: 
-                                    Check If you have spelled it correctly, be aware, the role is case-sensitive"  (configInfos.LocalRole.Name) )
-                |true -> let mapAgentSender = configInfos.Partners |> createMapSender <| listRoles
-                         let agentReceiver = configInfos.LocalRole.IP |> createReceiver <| configInfos.LocalRole.Port
-                         new AgentRouter(mapAgentSender,agentReceiver)
+    | false -> failwith "you don't have the correct number of roles in the YAML Configuration file"
+    | true ->
+        match (listRoles |> isIn <| configInfos.LocalRole.Name) with
+        |false -> failwith (sprintf "The following local role : %s from the config file doesn't belong to the protocol: 
+                            Check If you have spelled it correctly, be aware, the role is case-sensitive"  (configInfos.LocalRole.Name) )
+        |true -> 
+            printfn "Agents Infos :"            
+            let mapAgentSender = configInfos.Partners |> createMapSender <| listRoles
+            let agentReceiver = configInfos.LocalRole.IP |> createReceiver <| configInfos.LocalRole.Port
+            printfn "Infos For Agent Sender : %A" (mapAgentSender,configInfos.Partners,listRoles)
+            printfn "Infos For Agent Receiver : %A" (configInfos.LocalRole.IP,configInfos.LocalRole.Port,configInfos.LocalRole.Name)
+            new AgentRouter(mapAgentSender,agentReceiver)
