@@ -9,4 +9,5 @@ LocalRole:
   Port: 5004
 
 ScribblePath:
-   FileName: "C:/cygwin64/home/rhu/code/eclipse/scribble/github.com/rumineykova/scribble-java/scribblec.bat"
+  FileName: "C:/PathToScribble/scribblec.bat"
+

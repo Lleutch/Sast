@@ -95,7 +95,7 @@ module parserHelper =
     let startUpUseless:Parser<_,unit> = 
         pstring "compound = true;" 
         |> anyCharsTill
-        >>. skipNewline 
+        // >>. skipNewline 
          
     let current:Parser<_,unit> = 
         spaces 

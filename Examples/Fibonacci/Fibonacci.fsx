@@ -11,22 +11,22 @@ let delims = """ [ {"label" : "ADD", "delims": {"delim1": [":"] , "delim2": [","
 
 [<Literal>]
 let typeAliasing =
-    """ [ {"alias" : "Int", "type": "System.Int32"} ] """
+    """ [ {"alias" : "int", "type": "System.Int32"} ] """
 
 // C:/cygwin64/home/rhu/code/vs/scribble/github.com/rumineykova/Sast/Examples/Fibonacci/
 type Fib = 
-    Provided.TypeProviderFile<"../../../Examples/Fibonacci/Fib.scr" // Fully specified path to the scribble file
+    Provided.TypeProviderFile<"C:/cygwin64/home/rhu/code/vs/scribble/github.com/rumineykova/Sast/Examples/Fibonacci/Fib.scr" // Fully specified path to the scribble file
                                ,"Adder" // name of the protocol
                                ,"C" // local role
                                ,"../../../Examples/Fibonacci/config.yaml" // config file containing IP and port for each role and the path to the scribble script
                                ,Delimiter=delims 
                                ,TypeAliasing=typeAliasing // give mapping from scribble base files to F# types
-                               ,ScribbleSource = ScribbleSource.LocalExecutable> // choose one of the following options: (LocalExecutable | WebAPI | File)
-
+                               ,ScribbleSource = ScribbleSource.LocalExecutable // choose one of the following options: (LocalExecutable | WebAPI | File)
+                              >
 let numIter = 10-2
 let S = Fib.S.instance
 
-let rec fibrec a b iter (c0:Fib.State9) =
+let rec fibrec a b iter (c0:Fib.) =
     let res = new DomainModel.Buf<int>()
     printfn"number of iter: %d" (numIter - iter)
     let c = c0.sendHELLO(S, a, b)
