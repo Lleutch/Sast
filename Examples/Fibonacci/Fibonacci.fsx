@@ -17,11 +17,7 @@ let typeAliasing =
 
 // C:/cygwin64/home/rhu/code/vs/scribble/github.com/rumineykova/Sast/Examples/Fibonacci/
 type Fib = 
-<<<<<<< HEAD
-    Provided.TypeProviderFile<"C:/cygwin64/home/rhu/code/vs/scribble/github.com/rumineykova/Sast/Examples/Fibonacci/Fib.scr" // Fully specified path to the scribble file
-=======
     Provided.TypeProviderFile<"../../../Examples/Fibonacci/Fib.scr" // Fully specified path to the scribble file
->>>>>>> c01cad33d552c89ad5797d0c4014ab6c4cfe77fa
                                ,"Adder" // name of the protocol
                                ,"C" // local role
                                ,"../../../Examples/Fibonacci/config.yaml" // config file containing IP and port for each role and the path to the scribble script
