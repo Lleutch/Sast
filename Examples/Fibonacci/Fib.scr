@@ -9,8 +9,8 @@ global protocol Adder(role C, role S)
 
 	choice at C
 	{
-		ADD(x:int) from C to S; 
-		RES(z:int) from S to C;
+		ADD(x:int) from C to S; @"x < 3"
+		RES(z:int) from S to C; @"z < 3"
 		do Adder(C, S);
 	}
 	or

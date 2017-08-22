@@ -5,6 +5,9 @@ open System
 open System.Text.RegularExpressions
 open FParsec
 
+open AssertionParsing
+open AssertionParsing.FuncGenerator
+
 let printListJson (aList:list<string>) =
     let length = aList.Length
     List.fold
@@ -254,11 +257,13 @@ module Parsing =
                                 Partner     = tr.Partner |> Partner
                                 Label       = tr.Label |> Label
                                 Payload     = tr.Payload |> List.ofArray |> Payload
-                                Assertion   = tr.Assertion |> Assertion
+                                Assertion   = tr.Assertion |> genLambdaFromStr  |> Assertion 
                                 EventType   = tr.Type |> EventType
                                 Next        = tr.NextState |> Next
                             }  
                     ] |> Transitions
                 Some (finalRes.Stringify())
-                
+    
+
+                    
     let getFSMJson (json:string) = getArrayJson json

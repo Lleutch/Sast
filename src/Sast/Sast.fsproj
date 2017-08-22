@@ -1929,4 +1929,11 @@
     <Reference Include="System.Xml" />
     <Reference Include="System.Xml.Linq" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\AssertionParsing\AssertionParsing.fsproj">
+      <Name>AssertionParsing</Name>
+      <Project>{314a3e8a-2a3b-4122-886b-8d77e09acb73}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+  </ItemGroup>
 </Project>

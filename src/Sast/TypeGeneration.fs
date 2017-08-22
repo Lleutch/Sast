@@ -216,7 +216,14 @@ let internal makeRoleTypes (fsmInstance:ScribbleProtocole.Root []) =
     (mapping,listeType)
 
 
-
+let getAssertionDoc assertion = 
+    if (assertion <> "") then 
+        let sb = new System.Text.StringBuilder()
+        sb.Append("<summary> Method arguments should satisfy the following constraint:") |> ignore
+        sb.Append ("<para> - " + assertion.Replace(">", "&gt;").Replace("<","&gt;") + "</para>" ) |>ignore
+        sb.Append("</summary>") |>ignore
+        sb.ToString()
+    else ""    
 
 let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedList: ProvidedTypeDefinition list) (mRole:Map<string,ProvidedTypeDefinition>) : Map<string,ProvidedTypeDefinition> * ProvidedTypeDefinition list = 
     let mutable listeLabelSeen = []
@@ -273,7 +280,8 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
 //                                                    }
 //                                                @@>
                                           )
-                                                                                                                                                
+                        let doc = getAssertionDoc event.Assertion
+                        if doc <> "" then  myMethod.AddXmlDoc(doc)                                                                                                                                        
                         t <- t |> addMethod (myMethod)
 
                         t.SetAttributes(TypeAttributes.Public ||| TypeAttributes.Class)
@@ -323,6 +331,8 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
 //                                                    let exprDes = deserializeChoice buffers listPayload
 //                                                    Expr.Sequential(exprDes,exprState) 
                                           )
+                        let doc = getAssertionDoc event.Assertion
+                        if doc <> "" then myMethod.AddXmlDoc(doc)     
 
                         t <- t |> addMethod (myMethod)
 
@@ -409,64 +419,9 @@ let rec goingThrough (methodNaming:string) (providedList:ProvidedTypeDefinition 
                                                         let exprAction = 
                                                             Expr.Sequential(<@@ %(fn false) @@>,exprAction)
                                                         Expr.Sequential(exprAction,exprState) )
-                                               
-//                                               IsStaticMethod = false,
-//                                               InvokeCode = 
-//                                                fun args-> 
-//                                                    let buffers = args.Tail.Tail
-//                                                    //let buf = ser buffers
-//                                                    let payloads = toList event.Payload
-//                                                    let pDelim = payloadDelim.Head
-//                                                    let eDelim = endDelim.Head
-//                                                    let lDelim = labelDelim.Head
-////                                                    let buf = serialize fullName buffers payloads pDelim eDelim lDelim 
-////                                                    let stuff = 5
-////                                                    let buffers = (Expr.NewArray(typeof<obj>,buffers))
-//                                                    let expr =
-//                                                        <@@
-//                                                            result{
-//                                                                let! buf = %(serialize fullName buffers payloads pDelim eDelim lDelim)
-//    //                                                            let buf:byte [] = [||]
-//    //                                                            let! buf = %(serialize fullName buffers payloads pDelim eDelim lDelim)
-//                                                                Regarder.sendMessage "agent" buf role 
-//                                                                printfn "Message sent completly"
-//                                                                let data = %(Expr.Cast(Expr.Coerce(Expr.NewObject(c, []), typeof<obj>)))
-////                                                                let data = %%(Expr.NewObject(c, []))//, nextType))
-////                                                                let data = %(Expr.Cast(Expr.NewObject(c, [])))//, nextType))
-//    //                                                            let data = %%(exprState) // Expr.Coerce(exprState,typeof<obj>)  
-//    //                                                            let data = %%Expr.Coerce(exprState,nextType) 
-//                                                                printfn "Object casted %A" data
-//                                                                return data
-//                                                                //Expr.Sequential(exprDes,exprState) 
-//                                                            }
-//                                                        @@>
-////                                                    Expr.Call(Expr.s)
-//                                                    let test = expr.ToString()
-//                                                    expr
-//                                                    let mi = tyType.GetMethod("Cast", BindingFlags.Public ||| BindingFlags.Static)
-//                                                    let exprFin = Expr.Call(mi,[expr])
-//                                                    exprFin
-//                                                    let expr =
-//                                                        <@@
-//                                                            result{
-//                                                                let! buf = %(serialize fullName buffers payloads pDelim eDelim lDelim)
-//    //                                                            let buf:byte [] = [||]
-//    //                                                            let! buf = %(serialize fullName buffers payloads pDelim eDelim lDelim)
-//                                                                Regarder.sendMessage "agent" buf role 
-//                                                                printfn "Message sent completly"
-//                                                                let data = %%(Expr.NewObject(c, []))
-//    //                                                            let data = %%(exprState) // Expr.Coerce(exprState,typeof<obj>)  
-//    //                                                            let data = %%Expr.Coerce(exprState,nextType) 
-//                                                                printfn "Object casted %A" data
-//                                                                return data
-//                                                                //Expr.Sequential(exprDes,exprState) 
-//                                                            }
-//                                                        @@>
-//                                                    Expr.Coerce(expr,typeof<obj>)
-                                              
-                               aType 
-                                    |> addMethod myMethod
-                                    |> ignore
+                               let doc = getAssertionDoc event.Assertion
+                               if doc <> "" then myMethod.AddXmlDoc(doc) 
+                               aType |> addMethod myMethod |> ignore
                     |"receive" ->  let myMethod = 
                                     ProvidedMethod( methodName+nameLabel,listParam,nextType,
                                                     IsStaticMethod = false,
@@ -489,6 +444,9 @@ let rec goingThrough (methodNaming:string) (providedList:ProvidedTypeDefinition 
                                                             let exprDes = deserializeAsync buffers listPayload [message] role
                                                             Expr.Sequential(exprDes,exprState) 
                                                   )
+                                   let doc = getAssertionDoc event.Assertion
+                                   if doc <> "" then myMethod.AddXmlDoc(doc) 
+                                   myMethodAsync.AddXmlDoc(doc) 
                                    aType 
                                     |> addMethod myMethod
                                     |> addMethod myMethodAsync
@@ -526,11 +484,11 @@ let rec goingThrough (methodNaming:string) (providedList:ProvidedTypeDefinition 
                                             IsStaticMethod = false,
                                             InvokeCode = 
                                                 fun args-> 
-                                                    let buffers = args.Tail.Tail
+                                                    let buffers = args.Tail.Tail                                                    
                                                     //let buf = ser buffers
                                                     let exprAction = 
                                                         <@@ 
-                                                            let buf = %(serialize fullName buffers (toList event.Payload) (payloadDelim.Head) (endDelim.Head) (labelDelim.Head) )
+                                                            let buf = %(serialize fullName buffers (toList event.Payload) (payloadDelim.Head) (endDelim.Head) (labelDelim.Head) ) 
                                                             Regarder.sendMessage "agent" (buf:byte[]) role 
                                                         @@>
                                                     let fn eq =
@@ -544,6 +502,8 @@ let rec goingThrough (methodNaming:string) (providedList:ProvidedTypeDefinition 
                                                         Expr.Sequential(<@@ %(fn false) @@>,exprAction)
                                                     Expr.Sequential(exprAction,exprState) 
                                                )
+                        let doc = getAssertionDoc event.Assertion
+                        if doc <> "" then myMethod.AddXmlDoc(doc)
                         aType 
                             |> addMethod myMethod
                             |> ignore
@@ -570,6 +530,8 @@ let rec goingThrough (methodNaming:string) (providedList:ProvidedTypeDefinition 
                                                             let exprDes = deserializeAsync buffers listPayload [message] role
                                                             Expr.Sequential(exprDes,exprState) 
                                                   )
+                                   let doc = getAssertionDoc event.Assertion
+                                   if doc <> "" then myMethod.AddXmlDoc(doc); myMethodAsync.AddXmlDoc(doc)
                                    aType 
                                     |> addMethod myMethod
                                     |> addMethod myMethodAsync
