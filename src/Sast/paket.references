@@ -1,3 +1,2 @@
-FSharp.Configuration
-FSharp.Data 
-FParsec 
+FSharp.TypeProviders.StarterPack
+QuotationCompiler
