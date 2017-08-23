@@ -36,7 +36,6 @@ let rec fibrec a b iter (c0:Fib.State7) =
                 |0 -> 
                     let c1 = c.sendBYE(S)
                     let c2 = c1.receiveBYE(S)
-                    let c3 = c1.receiveBYE(S) 
                     c2.finish()
                 |n -> 
                     let c1 = c.sendADD(S, a)

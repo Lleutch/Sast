@@ -11,7 +11,7 @@ let delims = """ [ {"label" : "ADD", "delims": {"delim1": [":"] , "delim2": [","
 
 [<Literal>]
 let typeAliasing =
-    """ [ {"alias" : "Int", "type": "System.Int32"} ] """
+    """ [ {"alias" : "int", "type": "System.Int32"} ] """
 
 type Fib = 
     Provided.TypeProviderFile<"../../../Examples/Fibonacci/Fib.scr"
@@ -28,19 +28,20 @@ let C = Fib.C.instance
 
 
 
-let res1 = new DomainModel.Buf<int>()
-let res2 = new DomainModel.Buf<int>()
 
-let rec fibServer (c0:Fib.State21) =
-    let c = c0.receiveHELLO(C, res1, res2)
+
+let rec fibServer (c0:Fib.State17) =
+    let res1 = new DomainModel.Buf<int>()
+    let res2 = new DomainModel.Buf<int>()
+    let c = c0.receiveHELLO(C, res1)
     match c.branch() with 
         | :? Fib.BYE as bye-> 
             printfn"receive bye"
-            bye.receive(C).sendBYE(C).finish
+            bye.receive(C).sendBYE(C).finish()
         | :? Fib.ADD as add -> 
-                               printfn"receive add" 
-                               let c1 = add.receive(C, res1, res2).sendRES(C, res1.getValue()+res2.getValue())
-                               fibServer c1
+            printfn"receive add" 
+            let c1 = add.receive(C, res2).sendRES(C, 1)
+            fibServer c1
 
 let session = new Fib()
 let sessionCh = session.Start()
