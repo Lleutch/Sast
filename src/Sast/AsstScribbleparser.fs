@@ -4,29 +4,28 @@ open FSharp.Data
 open System
 open System.Text.RegularExpressions
 open FParsec
-
 open AssertionParsing
 open AssertionParsing.FuncGenerator
 
-let printListJson (aList:list<string>) =
+let printListJson (aList:list<string*string>) =
     let length = aList.Length
     List.fold
-        (fun (state,index) (elem:string) ->
+        (fun (state,index) ((varName, varType):string*string) ->
             (   if index < length then
-                    sprintf """%s"%s",""" state elem
+                    sprintf """%s{"varName":"%s", "varType":"%s" },""" state varName varType
                 else
-                    sprintf """%s"%s" """ state elem
+                    sprintf """%s{"varName":"%s", "varType":"%s"}""" state varName varType
              ,index+1)
         ) ("[",1) aList
     |> fun (state,_) -> state + "]"
-
-
 
 type Current = Current of int
 type Role = Role of string
 type Partner = Partner of string
 type Label = Label of string
-type Payload = Payload of string List
+type VarName = VarName of string
+type VarType = VarType of string
+type TrPayload = TrPayload of List<string*string>
 type EventType = EventType of string
 type Next = Next of int
 type Assertion = Assertion of string
@@ -37,7 +36,7 @@ type Transition =
         Role        : Role
         Partner     : Partner
         Label       : Label
-        Payload     : Payload    
+        TrPayload   : TrPayload    
         Assertion   : Assertion
         EventType   : EventType
         Next        : Next
@@ -47,7 +46,7 @@ type Transition =
         let (Role role)             = this.Role
         let (Partner partner)       = this.Partner
         let (Label label)           = this.Label
-        let (Payload payload)       = this.Payload     
+        let (TrPayload payload)     = this.TrPayload     
         let (EventType eventType)   = this.EventType
         let (Next next)             = this.Next
         let (Assertion assertion)   = this.Assertion
@@ -58,7 +57,7 @@ type Transition =
             role
             partner
             label
-            (if payload.Length = 1 && payload.[0] = "" then
+            (if payload.Length = 1 && payload.[0] = ("", "") then
                 printListJson []
              else
                 printListJson payload
@@ -111,7 +110,6 @@ module parserHelper =
         (manyChars normalChar) 
     // pstring "\"" .>> spaces .>> pstring "];" >>. spaces
 
-
     let current:Parser<_,unit> = 
         spaces 
         >>. quoted quotes pint32 .>> spaces 
@@ -146,12 +144,16 @@ module parserHelper =
         //let typePayload = spaces >>. manyChars (noneOf [',';')'])
         //let singlePayload = pipe3 varPayload (pstring ":") (spaces >>. varPayload) (fun id _ str ->  (id, str))
         let varName = manyChars (noneOf [',';')'; ':']) 
-        let dummyVars = (pstring "_" >>. varName ) |>> (fun x -> "")
+        let unitType = ((pstring "_" >>. varName ) <|> (pstring "Unit")) |>> (fun x -> "")
+        let dummyVars = (pstring "_" >>. varName ) //|>> (fun x -> "")
         let singlePayload =
-            pipe4 (spaces >>. manyChars (noneOf [',';')'; ':'])) (pstring ":") spaces (dummyVars <|> varName)
-                    (fun varName _ _ varType -> sprintf "%s" varType) // add (printf "%s:%s" varName varType) to support names variables
+            pipe4 (spaces >>.  varName) (pstring ":") spaces (unitType <|> varName)
+                    (fun name _ _ varType -> 
+                            if (varType<>"") 
+                                    then  (sprintf "%s" name, sprintf "%s" varType) 
+                            else sprintf "", "") // add (printf "%s:%s" varName varType) to support names variables
         spaces  >>. (sepBy singlePayload (pstring ",")) .>> (pstring ")")
-        |>> Payload           
+        |>> TrPayload           
     //(pstring ")\"" >>. spaces >>. pstring "];" >>. spaces)
     let assertion:Parser<_,unit> =
         let endOfPayload = pstring "\"" >>. spaces >>. pstring "];" >>. spaces
@@ -173,7 +175,7 @@ module parserHelper =
                     Role        = Role role
                     Partner     = partner
                     Label       = label
-                    Payload     = payload
+                    TrPayload     = payload
                     Assertion   = assertion      
                     EventType   = eventType
                     Next        = nextState
@@ -208,7 +210,7 @@ module Parsing =
     open parserHelper
     type ScribbleAPI = FSharp.Data.JsonProvider<""" { "code":"Code", "proto":"global protocol", "role":"local role" } """>
     type DiGraph = FSharp.Data.JsonProvider<""" {"result":"value"} """>
-    type ScribbleProtocole = FSharp.Data.JsonProvider<""" [ { "currentState":0 , "localRole":"StringLocalRole" , "partner":"StringPartner" , "label":"StringLabel" , "payload":["VarTypes"] , "assertion":"expression", "type":"EventType" , "nextState":0  } ] """>
+    type ScribbleProtocole = FSharp.Data.JsonProvider<""" [ { "currentState":0 , "localRole":"StringLocalRole" , "partner":"StringPartner" , "label":"StringLabel" , "payload":[{"varName":"someZ", "varType":"someType"}] , "assertion":"expression", "type":"EventType" , "nextState":0  } ] """>
                         
 
     let isCurrentChoice (fsm:ScribbleProtocole.Root []) (index:int) =
@@ -230,6 +232,15 @@ module Parsing =
             newArray <- Array.append newArray [|elem|]
         newArray
 
+    let transformPayloadToJson(payload: List<string*string>) = 
+        [for elem in payload do
+            yield ScribbleProtocole.Payload((fst elem), (snd elem))
+        ]
+    
+    let transformJsonToPayload(payload: List<ScribbleProtocole.Payload>) = 
+        [for elem in payload do
+            yield (elem.VarName, elem.VarType)
+        ]
 
     let getArrayJson (response:string) json =
         //let s = DiGraph.Parse(response)
@@ -256,14 +267,12 @@ module Parsing =
                                 Role        = tr.LocalRole |> Role
                                 Partner     = tr.Partner |> Partner
                                 Label       = tr.Label |> Label
-                                Payload     = tr.Payload |> List.ofArray |> Payload
-                                Assertion   = tr.Assertion |> genLambdaFromStr  |> Assertion 
+                                TrPayload   = tr.Payload |> List.ofArray |> transformJsonToPayload  |> TrPayload
+                                Assertion   = tr.Assertion |> genLambdaFromStr |> Assertion
                                 EventType   = tr.Type |> EventType
                                 Next        = tr.NextState |> Next
                             }  
                     ] |> Transitions
                 Some (finalRes.Stringify())
-    
-
-                    
+                
     let getFSMJson (json:string) = getArrayJson json

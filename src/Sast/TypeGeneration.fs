@@ -166,18 +166,19 @@ let internal createProvidedParameters (event : ScribbleProtocole.Root) =
 
     [for param in payload do
         n <- n+1
-        if param.Contains("[]") then
-            let nameParam = param.Replace("[]","")
+        if param.VarType.Contains("[]") then
+            let nameParam = param.VarType.Replace("[]","")
             let typing = System.Type.GetType(nameParam)
             let arrType = typing.MakeArrayType()
             let genType = generic.MakeGenericType(arrType)
-            yield ProvidedParameter(("Payload_" + string n),genType) // returns all the buffer
+            //yield ProvidedParameter(("Payload_" + string n),genType) // returns all the buffer
+            yield ProvidedParameter((param.VarName),genType) 
         else
             // Currently this Case is throwing an error due to the fact that 
             // The type returned by the scribble API is not an F# type
             // This case should be handled properly
-            let genType = generic.MakeGenericType(System.Type.GetType(param))
-            yield ProvidedParameter(("Payload_" + string n),genType) // returns all the buffer
+            let genType = generic.MakeGenericType(System.Type.GetType(param.VarType))
+            yield ProvidedParameter((param.VarName),genType) // returns all the buffer
     ]
 
 
@@ -189,6 +190,13 @@ let internal toList (array:_ []) =
     [for elem in array do
         yield elem ]
 
+let internal payloadsToList (payloads:ScribbleProtocole.Payload []) =
+    [for elem in payloads do
+        yield elem.VarType ]
+
+let internal payloadsToProvidedList (payloads:ScribbleProtocole.Payload []) =
+    [for elem in payloads do
+        yield ProvidedParameter((elem.VarName),System.Type.GetType(elem.VarType))]
 
                        
 let internal makeRoleTypes (fsmInstance:ScribbleProtocole.Root []) = 
@@ -220,7 +228,7 @@ let getAssertionDoc assertion =
     if (assertion <> "") then 
         let sb = new System.Text.StringBuilder()
         sb.Append("<summary> Method arguments should satisfy the following constraint:") |> ignore
-        sb.Append ("<para> - " + assertion.Replace(">", "&gt;").Replace("<","&gt;") + "</para>" ) |>ignore
+        sb.Append ("<para>" + assertion.Replace(">", "&gt;").Replace("<","&gt;") + "</para>" ) |>ignore
         sb.Append("</summary>") |>ignore
         sb.ToString()
     else ""    
@@ -268,7 +276,7 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
                                            InvokeCode = 
                                             fun args-> 
                                                 let buffers = args.Tail.Tail
-                                                let listPayload = (toList event.Payload)
+                                                let listPayload = (payloadsToList event.Payload)
                                                 let exprDes = deserializeChoice buffers listPayload
                                                 Expr.Sequential(exprDes,exprState)
 //                                                <@@
@@ -317,7 +325,7 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
                                             InvokeCode = 
                                                 fun args-> 
                                                     let buffers = args.Tail.Tail
-                                                    let listPayload = (toList event.Payload)
+                                                    let listPayload = (payloadsToList event.Payload)
                                                     let exprDes = deserializeChoice buffers listPayload
                                                     Expr.Sequential(exprDes,exprState)
 //                                                    <@@
@@ -386,7 +394,7 @@ let rec goingThrough (methodNaming:string) (providedList:ProvidedTypeDefinition 
                 let role = event.Partner
                 let listTypes = 
                     match methodName with
-                        |"send" -> toProvidedList event.Payload
+                        |"send" -> payloadsToProvidedList event.Payload
                         |"receive" -> createProvidedParameters event
                         | _ -> []
                 let listParam = 
@@ -406,7 +414,7 @@ let rec goingThrough (methodNaming:string) (providedList:ProvidedTypeDefinition 
                                                         //let buf = serializeMessage fullName (toList event.Payload) buffers
                                                         let exprAction = 
                                                             <@@ 
-                                                                let buf = %(serialize fullName buffers (toList event.Payload) (payloadDelim.Head) (endDelim.Head) (labelDelim.Head) )
+                                                                let buf = %(serialize fullName buffers (payloadsToList event.Payload) (payloadDelim.Head) (endDelim.Head) (labelDelim.Head) )
                                                                 Regarder.sendMessage "agent" (buf:byte[]) role 
                                                             @@>
                                                         let fn eq =
@@ -428,7 +436,7 @@ let rec goingThrough (methodNaming:string) (providedList:ProvidedTypeDefinition 
                                                     InvokeCode = 
                                                         fun args-> 
                                                             let buffers = args.Tail.Tail
-                                                            let listPayload = (toList event.Payload)
+                                                            let listPayload = (payloadsToList event.Payload)
                                                             let exprDes = deserialize buffers listPayload [message] role
                                                             let exprDes = 
                                                                 Expr.Sequential(<@@ printing "METHOD USED : Receive + Label = " nameLabel @@>,exprDes)
@@ -440,7 +448,7 @@ let rec goingThrough (methodNaming:string) (providedList:ProvidedTypeDefinition 
                                                     InvokeCode = 
                                                         fun args-> 
                                                             let buffers = args.Tail.Tail
-                                                            let listPayload = (toList event.Payload)
+                                                            let listPayload = (payloadsToList event.Payload)
                                                             let exprDes = deserializeAsync buffers listPayload [message] role
                                                             Expr.Sequential(exprDes,exprState) 
                                                   )
@@ -468,7 +476,7 @@ let rec goingThrough (methodNaming:string) (providedList:ProvidedTypeDefinition 
                    let role = event.Partner
                    let listTypes = 
                     match methodName with
-                        |"send" -> toProvidedList event.Payload
+                        |"send" -> payloadsToProvidedList event.Payload
                         |"receive" -> createProvidedParameters event
                         | _ -> []
                    let listParam = 
@@ -488,7 +496,7 @@ let rec goingThrough (methodNaming:string) (providedList:ProvidedTypeDefinition 
                                                     //let buf = ser buffers
                                                     let exprAction = 
                                                         <@@ 
-                                                            let buf = %(serialize fullName buffers (toList event.Payload) (payloadDelim.Head) (endDelim.Head) (labelDelim.Head) ) 
+                                                            let buf = %(serialize fullName buffers (payloadsToList event.Payload) (payloadDelim.Head) (endDelim.Head) (labelDelim.Head) ) 
                                                             Regarder.sendMessage "agent" (buf:byte[]) role 
                                                         @@>
                                                     let fn eq =
@@ -513,7 +521,7 @@ let rec goingThrough (methodNaming:string) (providedList:ProvidedTypeDefinition 
                                                     InvokeCode = 
                                                         fun args-> 
                                                             let buffers = args.Tail.Tail
-                                                            let listPayload = (toList event.Payload)
+                                                            let listPayload = (payloadsToList event.Payload)
                                                             let exprDes = deserialize buffers listPayload [message] role
                                                             let exprDes = 
                                                                 Expr.Sequential(<@@ printing "METHOD USED : Receive + Label = " nameLabel @@>,exprDes)
@@ -526,7 +534,7 @@ let rec goingThrough (methodNaming:string) (providedList:ProvidedTypeDefinition 
                                                     InvokeCode = 
                                                         fun args -> 
                                                             let buffers = args.Tail.Tail
-                                                            let listPayload = (toList event.Payload)
+                                                            let listPayload = (payloadsToList event.Payload)
                                                             let exprDes = deserializeAsync buffers listPayload [message] role
                                                             Expr.Sequential(exprDes,exprState) 
                                                   )
@@ -586,7 +594,7 @@ let rec addProperties (providedListStatic:ProvidedTypeDefinition list) (provided
                                         ProvidedMethod( "branch",[],labelType,IsStaticMethod = false,
                                                         InvokeCode = 
                                                             fun args -> 
-                                                                let listPayload = (toList event.Payload)
+                                                                let listPayload = (payloadsToList event.Payload)
                                                                 let listExpectedMessages = getAllChoiceLabels indexList fsmInstance
                                                                 <@@ 
                                                                     let result = Regarder.receiveMessage "agent" listExpectedMessages role listPayload 
@@ -629,7 +637,7 @@ let rec addProperties (providedListStatic:ProvidedTypeDefinition list) (provided
                                                         IsStaticMethod = false, 
                                                         InvokeCode = 
                                                                 (fun args  ->  
-                                                                    let listPayload = (toList event.Payload) 
+                                                                    let listPayload = (payloadsToList event.Payload) 
                                                                     let listExpectedMessages = getAllChoiceLabels indexList fsmInstance
                                                                     <@@ 
                                                                         let result = Regarder.receiveMessage "agent" listExpectedMessages role listPayload 
