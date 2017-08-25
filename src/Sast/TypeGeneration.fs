@@ -282,15 +282,7 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
                                                 let buffers = args.Tail.Tail
                                                 let listPayload = (payloadsToList event.Payload)
                                                 let exprDes = deserializeChoice buffers listPayload
-                                                Expr.Sequential(exprDes,exprState)
-//                                                <@@
-//                                                    result{
-//                                                        do! %(deserializeChoice buffers listPayload)
-//                                                        let data = %%Expr.Coerce(exprState,typeof<obj>) 
-//                                                        return data
-//                                                        //Expr.Sequential(exprDes,exprState) 
-//                                                    }
-//                                                @@>
+                                                Expr.Sequential(exprDes,exprState)//                                             
                                           )
                         let doc = getAssertionDoc event.Assertion
                         if doc <> "" then  myMethod.AddXmlDoc(doc)                                                                                                                                        
@@ -332,16 +324,6 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
                                                     let listPayload = (payloadsToList event.Payload)
                                                     let exprDes = deserializeChoice buffers listPayload
                                                     Expr.Sequential(exprDes,exprState)
-//                                                    <@@
-//                                                        result{
-//                                                            do! %(deserializeChoice buffers listPayload)
-//                                                            let data = %%Expr.Coerce(exprState,typeof<obj>)  
-//                                                            return data
-//                                                            //Expr.Sequential(exprDes,exprState) 
-//                                                        }
-//                                                    @@>
-//                                                    let exprDes = deserializeChoice buffers listPayload
-//                                                    Expr.Sequential(exprDes,exprState) 
                                           )
                         let doc = getAssertionDoc event.Assertion
                         if doc <> "" then myMethod.AddXmlDoc(doc)     
@@ -465,6 +447,16 @@ let rec goingThrough (methodNaming:string) (providedList:ProvidedTypeDefinition 
                                                             let exprDes = deserialize buffers listPayload [message] role
                                                             let exprDes = 
                                                                 Expr.Sequential(<@@ printing "METHOD USED : Receive + Label = " nameLabel @@>,exprDes)
+                                                            
+                                                            let payloadNames = (payloadsToListStr event.Payload )
+                                                            let addToCacheExpr = 
+                                                                <@@ let myValues:Buf<int> [] = (%%(Expr.NewArray(typeof<Buf<int>>, buffers)):Buf<int> []) 
+                                                                    Regarder.addVarsBufs "cache" payloadNames myValues @@>
+
+                                                            let exprDes = Expr.Sequential(exprDes, addToCacheExpr)                                                            
+                                                            let cachePrintExpr = <@@ Regarder.printCount "cache" @@>
+                                                            let exprDes = Expr.Sequential(exprDes, cachePrintExpr)
+
                                                             Expr.Sequential(exprDes,exprState) 
                                                    )
                                    let myMethodAsync =  
@@ -535,25 +527,18 @@ let rec goingThrough (methodNaming:string) (providedList:ProvidedTypeDefinition 
                                                             else
                                                                 printing "METHOD USED : Send + Label = " nameLabel 
                                                         @>
+                                                    
                                                     let exprAction = 
                                                         Expr.Sequential(<@@ %(fn false) @@>,exprAction)
                                                     
-                                                    let cachevarExpr = 
-                                                            <@@ 
-                                                                let myValues:int [] = (%%(Expr.NewArray(typeof<int>, buffers)):int []) 
+                                                    let addToCacheExpr = 
+                                                            <@@ let myValues:int [] = (%%(Expr.NewArray(typeof<int>, buffers)):int []) 
+                                                                Regarder.addVars "cache" payloadNames myValues  
+                                                             @@>
+                                                    let exprAction = Expr.Sequential(addToCacheExpr, exprAction)
+                                                    let printCacheExpr = <@@ Regarder.printCount "cache" @@>
+                                                    let exprAction = Expr.Sequential(printCacheExpr,exprAction)
 
-                                                                Regarder.addVars "cache" payloadNames myValues //|> ignore)
-                                                            @@>
-                                                    let exprAction = 
-                                                            Expr.Sequential(cachevarExpr,exprAction)
-
-                                                    let newExpr = 
-                                                            <@@
-                                                                Regarder.printCount "cache"
-                                                            @@>
-                                                    
-                                                    let exprAction = 
-                                                            Expr.Sequential(newExpr,exprAction)
                                                     Expr.Sequential(exprAction,exprState) 
                                                )
                         let doc = getAssertionDoc event.Assertion
@@ -571,6 +556,16 @@ let rec goingThrough (methodNaming:string) (providedList:ProvidedTypeDefinition 
                                                             let exprDes = deserialize buffers listPayload [message] role
                                                             let exprDes = 
                                                                 Expr.Sequential(<@@ printing "METHOD USED : Receive + Label = " nameLabel @@>,exprDes)
+                                                           
+                                                            let payloadNames = (payloadsToListStr event.Payload )
+                                                            let addToCacheExpr = 
+                                                                <@@ let myValues:Buf<int> [] = (%%(Expr.NewArray(typeof<Buf<int>>, buffers)):Buf<int> [])  
+                                                                    Regarder.addVarsBufs "cache" payloadNames myValues @@>
+
+                                                            let exprDes = Expr.Sequential(exprDes, addToCacheExpr)
+                                                            let printCacheExpr = <@@ Regarder.printCount "cache" @@>
+                                                            let exprDes = Expr.Sequential(exprDes, printCacheExpr)
+
                                                             Expr.Sequential(exprDes,exprState) 
                                                    )
                                    

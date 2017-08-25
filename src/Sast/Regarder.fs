@@ -2,6 +2,7 @@
 
 open ProviderImplementation.ProvidedTypes
 open ScribbleGenerativeTypeProvider.CommunicationAgents
+open ScribbleGenerativeTypeProvider.DomainModel
 open System.Collections.Concurrent
 
 let mutable dico = Map.empty<string,AgentRouter>
@@ -41,21 +42,11 @@ let mutable cache = Map.empty<string,VarCache>
 let initCache name (newCache:VarCache) = 
     cache <- cache.Add(name, newCache)
 
-let printCount1 name = 
-    printf "Cache count is: %A" (cache.Item(name))
-
 let printCount name= 
-    printf "Cache count is: %i" (cache.Item(name).RuntimeOperation())
+        cache.Item(name).Print()
 
 let addVars name (keys: string list) (values:int[]) = 
     keys |> List.iteri (fun i key ->  cache.Item(name).Add(key, values.[0]))
 
-(*let printCount1 = 
-    printf "Cache count is:"
-
-let printCount = 
-    printf "Cache count is:"
-
-let addVars (keys: string list) (values:int[]) = 
-    printf "keys values"
-*)
+let addVarsBufs name (keys: string list) (values:Buf<int>[]) = 
+    keys |> List.iteri (fun i key ->  cache.Item(name).Add(key, values.[0].getValue()))

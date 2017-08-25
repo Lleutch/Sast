@@ -11,19 +11,29 @@ open System
 open ScribbleGenerativeTypeProvider.DomainModel
 open System.Collections.Generic
 
+//let isDummyVar (x:string) = x.StartsWith("_")
+//if not (isDummyVar k) then 
+
 type VarCache() =
     let data = Dictionary<string,int>()
     member x.RuntimeOperation() = data.Count  
       
     member x.Add(k:string, v:int) = 
-        match data.ContainsKey(k) with 
-        | true -> data.Item(k) <- v
-        | _ -> data.Add(k, v) 
+      
+            match data.ContainsKey(k) with 
+            | true -> data.Item(k) <- v
+            | _ -> data.Add(k, v) 
     
     member x.Get(k:string) = 
         match data.TryGetValue(k) with 
         | true, value -> value
         | _ -> failwith (sprintf "Cannot retrieve value from cache: %s" k)
+
+    member x.Print() = 
+        printf "Cache: "
+        [for key in data.Keys do 
+            printf "%s -- %i " key (data.Item(key))
+        ]
 
 
 let createCache = new VarCache()
