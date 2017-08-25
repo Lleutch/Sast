@@ -41,4 +41,4 @@ module Visitors =
             let leftSet = getVars left
             let rightSet = getVars right
             let res = leftSet |> Set.union rightSet
-            res
+            res 

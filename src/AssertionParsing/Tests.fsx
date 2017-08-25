@@ -21,3 +21,9 @@ test "x=y"
 test "x<y && x>10 || z+y>s1" 
 test "x<y"
  
+open System.Collections.Generic
+let data = new Dictionary<string,int>()
+data.Add("x", 1)
+data.Item("x") <- 2
+
+data.Item("x")

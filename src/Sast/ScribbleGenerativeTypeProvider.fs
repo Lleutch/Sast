@@ -83,7 +83,8 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
         (tupleLabel |> fst) |> Regarder.ajouterLabel
         let agentRouter = (DomainModel.config) |> createRouter <| listOfRoles 
         Regarder.ajouter "agent" agentRouter
-
+        let cache = createCache
+        Regarder.initCache "cache" cache
 
         addProperties listTypes listTypes (Set.toList stateSet) (fst tupleLabel) (fst tupleRole) protocol
 

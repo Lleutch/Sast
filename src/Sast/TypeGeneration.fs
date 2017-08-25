@@ -194,6 +194,10 @@ let internal payloadsToList (payloads:ScribbleProtocole.Payload []) =
     [for elem in payloads do
         yield elem.VarType ]
 
+let internal payloadsToListStr (payloads:ScribbleProtocole.Payload []) =
+    [for elem in payloads do
+        yield elem.VarName]
+
 let internal payloadsToProvidedList (payloads:ScribbleProtocole.Payload []) =
     [for elem in payloads do
         yield ProvidedParameter((elem.VarName),System.Type.GetType(elem.VarType))]
@@ -412,10 +416,14 @@ let rec goingThrough (methodNaming:string) (providedList:ProvidedTypeDefinition 
                                                         let buffers = args.Tail.Tail
 //                                                        let buf = serialize fullName buffers (toList event.Payload) (payloadDelim.Head) (endDelim.Head) (labelDelim.Head) 
                                                         //let buf = serializeMessage fullName (toList event.Payload) buffers
+                                                        let payloadNames = (payloadsToListStr event.Payload )
+                                                        
                                                         let exprAction = 
                                                             <@@ 
-                                                                let buf = %(serialize fullName buffers (payloadsToList event.Payload) (payloadDelim.Head) (endDelim.Head) (labelDelim.Head) )
-                                                                Regarder.sendMessage "agent" (buf:byte[]) role 
+                                                                
+                                                               let buf = %(serialize fullName buffers (payloadsToList event.Payload) (payloadDelim.Head) (endDelim.Head) (labelDelim.Head) )                                                              
+                                                               
+                                                               Regarder.sendMessage "agent" (buf:byte[]) role 
                                                             @@>
                                                         let fn eq =
                                                             <@
@@ -426,7 +434,24 @@ let rec goingThrough (methodNaming:string) (providedList:ProvidedTypeDefinition 
                                                             @>
                                                         let exprAction = 
                                                             Expr.Sequential(<@@ %(fn false) @@>,exprAction)
-                                                        Expr.Sequential(exprAction,exprState) )
+                                                        
+                                                        let cachevarExpr = 
+                                                            <@@
+                                                                let myValues:int [] = (%%(Expr.NewArray(typeof<int>, buffers)):int []) 
+                                                                Regarder.addVars "cache" payloadNames myValues //|> ignore)
+                                                            @@>
+                                                        let exprAction = 
+                                                            Expr.Sequential(cachevarExpr,exprAction)
+
+                                                        let newExpr = 
+                                                            <@@
+                                                                Regarder.printCount "cache"
+                                                            @@>
+
+                                                        let exprAction = 
+                                                            Expr.Sequential(newExpr,exprAction)
+                                                        Expr.Sequential(exprAction,exprState))
+
                                let doc = getAssertionDoc event.Assertion
                                if doc <> "" then myMethod.AddXmlDoc(doc) 
                                aType |> addMethod myMethod |> ignore
@@ -492,11 +517,15 @@ let rec goingThrough (methodNaming:string) (providedList:ProvidedTypeDefinition 
                                             IsStaticMethod = false,
                                             InvokeCode = 
                                                 fun args-> 
-                                                    let buffers = args.Tail.Tail                                                    
+                                                    let buffers = args.Tail.Tail         
+                                                    
+                                                    let payloadNames = (payloadsToListStr event.Payload )
+                                           
                                                     //let buf = ser buffers
                                                     let exprAction = 
                                                         <@@ 
                                                             let buf = %(serialize fullName buffers (payloadsToList event.Payload) (payloadDelim.Head) (endDelim.Head) (labelDelim.Head) ) 
+                                                            
                                                             Regarder.sendMessage "agent" (buf:byte[]) role 
                                                         @@>
                                                     let fn eq =
@@ -508,6 +537,23 @@ let rec goingThrough (methodNaming:string) (providedList:ProvidedTypeDefinition 
                                                         @>
                                                     let exprAction = 
                                                         Expr.Sequential(<@@ %(fn false) @@>,exprAction)
+                                                    
+                                                    let cachevarExpr = 
+                                                            <@@ 
+                                                                let myValues:int [] = (%%(Expr.NewArray(typeof<int>, buffers)):int []) 
+
+                                                                Regarder.addVars "cache" payloadNames myValues //|> ignore)
+                                                            @@>
+                                                    let exprAction = 
+                                                            Expr.Sequential(cachevarExpr,exprAction)
+
+                                                    let newExpr = 
+                                                            <@@
+                                                                Regarder.printCount "cache"
+                                                            @@>
+                                                    
+                                                    let exprAction = 
+                                                            Expr.Sequential(newExpr,exprAction)
                                                     Expr.Sequential(exprAction,exprState) 
                                                )
                         let doc = getAssertionDoc event.Assertion

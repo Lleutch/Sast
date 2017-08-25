@@ -26,10 +26,6 @@ type Fib =
 let numIter = 10-2
 let C = Fib.C.instance
 
-
-
-
-
 let rec fibServer (c0:Fib.State17) =
     let res1 = new DomainModel.Buf<int>()
     let res2 = new DomainModel.Buf<int>()

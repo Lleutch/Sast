@@ -26,7 +26,7 @@ type Fib =
                                ,ScribbleSource = ScribbleSource.LocalExecutable // choose one of the following options: (LocalExecutable | WebAPI | File)
                               >
 
-let numIter = 8
+let numIter = 3
 let S = Fib.S.instance
 let rec fibrec a b iter (c0:Fib.State7) = 
             let res = new DomainModel.Buf<int>()

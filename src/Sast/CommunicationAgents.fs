@@ -11,7 +11,22 @@ open System
 open ScribbleGenerativeTypeProvider.DomainModel
 open System.Collections.Generic
 
+type VarCache() =
+    let data = Dictionary<string,int>()
+    member x.RuntimeOperation() = data.Count  
+      
+    member x.Add(k:string, v:int) = 
+        match data.ContainsKey(k) with 
+        | true -> data.Item(k) <- v
+        | _ -> data.Add(k, v) 
+    
+    member x.Get(k:string) = 
+        match data.TryGetValue(k) with 
+        | true, value -> value
+        | _ -> failwith (sprintf "Cannot retrieve value from cache: %s" k)
 
+
+let createCache = new VarCache()
 
 let printing message data =
     let doPrinting = true
