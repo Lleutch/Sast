@@ -11,18 +11,17 @@ open System
 open ScribbleGenerativeTypeProvider.DomainModel
 open System.Collections.Generic
 
-//let isDummyVar (x:string) = x.StartsWith("_")
-//if not (isDummyVar k) then 
+let isDummyVar (x:string) = x.StartsWith("_")
 
 type VarCache() =
     let data = Dictionary<string,int>()
     member x.RuntimeOperation() = data.Count  
       
     member x.Add(k:string, v:int) = 
-      
-            match data.ContainsKey(k) with 
-            | true -> data.Item(k) <- v
-            | _ -> data.Add(k, v) 
+      if not (isDummyVar k) then 
+        match data.ContainsKey(k) with 
+        | true -> data.Item(k) <- v
+        | _ -> data.Add(k, v) 
     
     member x.Get(k:string) = 
         match data.TryGetValue(k) with 
