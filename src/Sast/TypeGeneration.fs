@@ -584,11 +584,12 @@ let internal getAllChoiceLabels (indexList : int list) (fsmInstance:ScribbleProt
             match list with
                 |[] -> acc
                 |hd::tl -> 
-                    printfn "getAllChoiceLabels : I run"
+                    printing "getAllChoiceLabels : I run" ""
                     let label = fsmInstance.[hd].Label
                     let labelDelim,_,_ = getDelims label
                     let labelBytes = label |> serLabel <| (labelDelim.Head) 
-                    aux tl (labelBytes::acc) 
+                    let typing = fsmInstance.[hd].Payload |> List.ofArray
+                    aux tl ((labelBytes,typing)::acc) 
         in aux indexList []
 
 let internal getAllChoiceLabelString (indexList : int list) (fsmInstance:ScribbleProtocole.Root []) =
@@ -624,10 +625,13 @@ let rec addProperties (providedListStatic:ProvidedTypeDefinition list) (provided
                                         ProvidedMethod( "branch",[],labelType,IsStaticMethod = false,
                                                         InvokeCode = 
                                                             fun args -> 
-                                                                let listPayload = (toList event.Payload)
-                                                                let listExpectedMessages = getAllChoiceLabels indexList fsmInstance
+                                                                let listExpectedMessagesAndTypes = getAllChoiceLabels indexList fsmInstance
+                                                                let listExpectedMessages = listExpectedMessagesAndTypes |> List.map fst
+                                                                let listExpectedTypes = listExpectedMessagesAndTypes |> List.map snd
+                                                                 
                                                                 <@@ 
-                                                                    let result = Regarder.receiveMessage "agent" listExpectedMessages role listPayload 
+                                                                    printing "Before Branching : " (listExpectedMessagesAndTypes)
+                                                                    let result = Regarder.receiveMessage "agent" listExpectedMessages role listExpectedTypes
                                                                     let decode = new UTF8Encoding()
                                                                     let labelRead = decode.GetString(result.[0])
                                                                     printing "Goes from english to chinese : %A" (result,labelRead)
@@ -668,9 +672,13 @@ let rec addProperties (providedListStatic:ProvidedTypeDefinition list) (provided
                                                         InvokeCode = 
                                                                 (fun args  ->  
                                                                     let listPayload = (toList event.Payload) 
-                                                                    let listExpectedMessages = getAllChoiceLabels indexList fsmInstance
+                                                                    let listExpectedMessagesAndTypes  = getAllChoiceLabels indexList fsmInstance
+                                                                    let listExpectedMessages = listExpectedMessagesAndTypes |> List.map fst
+                                                                    let listExpectedTypes = listExpectedMessagesAndTypes |> List.map snd
                                                                     <@@ 
-                                                                        let result = Regarder.receiveMessage "agent" listExpectedMessages role listPayload 
+                                                                        // TODO : provide (ListExpectedMessages alongside there types)
+                                                                        printing "Before Branching : " (listExpectedMessages,listExpectedTypes,listPayload)
+                                                                        let result = Regarder.receiveMessage "agent" listExpectedMessages role listExpectedTypes
                                                                         let decode = new UTF8Encoding() 
                                                                         let labelRead = decode.GetString(result.[0]) 
                                                                         let assembly = System.Reflection.Assembly.GetExecutingAssembly() 

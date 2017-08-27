@@ -148,7 +148,7 @@ let deserialize (args: Expr list)  (listTypes:string list) (messages: _ list) (r
                     yield Expr.Coerce(elem,typeof<ISetResult>) ]
 
     <@ 
-        let result = Regarder.receiveMessage "agent" messages role listTypes 
+        let result = Regarder.receiveMessage "agent" messages role [listTypes]
         printfn " deserialize Normal : %A || Role : %A || listTypes : %A" messages role listTypes
         printing " received Bytes: " result
             

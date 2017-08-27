@@ -30,7 +30,9 @@ let receiveMessageAsync agent message role listTypes =
     dico.Item(agent).ReceiveMessageAsync(message,role,listTypes) 
 
 let receiveMessage agent message role listTypes =
-    dico.Item(agent).ReceiveMessage(message,role,listTypes) 
+    let messageAndTypes = List.zip message listTypes
+    dico.Item(agent).ReceiveMessage(messageAndTypes,role) 
 
 let receiveChoice agent =
     dico.Item(agent).ReceiveChoice()
+
