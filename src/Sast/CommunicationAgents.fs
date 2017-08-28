@@ -103,7 +103,7 @@ let internal readLab (s : NetworkStream) (labels : byte[] list) =
     printing  "Read Real Label :" ""
     aux [||]
 
-let readPay (s:Stream) (label:string) = 
+let readPay (s:Stream) (label:string) types = 
     // TODO : FIX Num 3 TMP
     let str1 = label.[0..(label.Length-2)] 
     let str2 = label
@@ -119,17 +119,21 @@ let readPay (s:Stream) (label:string) =
     let dis = new BinaryReader(s)
     let decode = new UTF8Encoding()
     printing "Reading payloads :" ""
-    let rec aux accList accArray =
-        let tmp = dis.ReadByte()
-        let value = decode.GetString([|tmp|])
-        printing value tmp
-        if (List.exists (fun elem -> elem = value) listDelEnd) then 
-            (accArray::accList) |> List.rev 
-        elif (List.exists (fun elem -> elem = value) listDelPay) then 
-            aux (accArray::accList) [||]
-        else
-            aux accList (Array.append accArray [|tmp|])
-    in aux [] [||]
+    let rec aux accList accArray leftTypes =
+        match leftTypes with
+        | [] ->
+            accList |> List.rev
+        | hd::tl ->
+            let tmp = dis.ReadByte()
+            let value = decode.GetString([|tmp|])
+            printing value tmp
+            if (List.exists (fun elem -> elem = value) listDelEnd) then 
+                (accArray::accList) |> List.rev 
+            elif (List.exists (fun elem -> elem = value) listDelPay) then 
+                aux (accArray::accList) [||] tl
+            else
+                aux accList (Array.append accArray [|tmp|]) (hd::tl)
+    in aux [] [||] types
 
 
 type AgentSender(ipAddress,port) =
@@ -259,12 +263,14 @@ type AgentReceiver(ipAddress,port) =
                     let decode = new System.Text.UTF8Encoding()
                     let (label,delim) = readLab stream message
                     match label with
-                        |msg when (message |> isIn <| (Array.append msg delim) ) |> not -> failwith "Received a wrong Label, that doesn't belong to the possible Labels at this state"
-                        | _ ->  let payloads = readPay stream (decode.GetString(label))
-                                let list1 = label::payloads
-                                channel.Reply(list1)
+                    |msg when (message |> isIn <| (Array.append msg delim) ) |> not -> failwith "Received a wrong Label, that doesn't belong to the possible Labels at this state"
+                    | _ ->  
+                        printing "\n \n List of Types : " listTypes
+                        let payloads = readPay stream (decode.GetString(label)) listTypes
+                        let list1 = label::payloads
+                        channel.Reply(list1)
                     return! loop()
-                |ReceiveMessage (message,role,listTypes,channel) ->
+                |ReceiveMessage (message,role,channel) ->
                     printing "Check ClientMap :" clientMap
                     if not(clientMap.ContainsKey("hey")) then
                         waitForCancellation "hey" 50 |> ignore // Change the number
@@ -276,7 +282,7 @@ type AgentReceiver(ipAddress,port) =
                     let (label,delim) = 
                         try 
                             printing "INSIDE the TRY WITH for readLab:" message
-                            let res = readLab stream message
+                            let res = readLab stream (message |> List.map fst)
                             succeed <- true
                             res
                         with
@@ -285,14 +291,22 @@ type AgentReceiver(ipAddress,port) =
                             [||],[||]
                     printing " Label Read :" (label,delim,message,succeed)
                     match label with
-                    |msg when (message |> isIn <| (Array.append msg delim) ) |> not -> 
+                    |msg when ( (message |> List.map fst) |> isIn <| (Array.append msg delim) ) |> not -> 
                         printing "wrong label read :" (label,message)
                         failwith "Received a wrong Label, that doesn't belong to the possible Labels at this state"
-                    | _ ->  printing "Read Payload" ""
-                            let payloads = readPay stream (decode.GetString(label))
-                            let list1 = label::payloads
-                            printing "Before Reply on channel" ""
-                            channel.Reply(list1)
+                    | _ ->  
+                        let listTypes = message |> List.map snd
+                        printing "\n \n List of Types : " (listTypes,label,message)
+                        printing "Read Payload" ""
+                        let labelAssociatedTypes =
+                            let label = Array.append label delim 
+                            let types = List.find (fun element -> (element |> fst) = label) message |> snd
+                            types
+                        printing "\n \n Types given : " (labelAssociatedTypes,label,message)
+                        let payloads = readPay stream (decode.GetString(label)) labelAssociatedTypes
+                        let list1 = label::payloads
+                        printing "Before Reply on channel" ""
+                        channel.Reply(list1)
                     (*let dis = new BinaryReader(stream)
                     let c = dis.ReadBytes(4)
                     channel.Reply([c])*)
@@ -329,11 +343,11 @@ type AgentReceiver(ipAddress,port) =
                      
     member this.ReceiveMessage(message) =
         System.Console.WriteLine("RECEIVING...")
-        let (msg,role,listTypes,ch) = message
+        let (msg,role,ch) = message
         match agentReceiver with
             |Some receive -> 
                 printfn "Wait Reply"
-                receive.PostAndReply(fun channel -> Message.ReceiveMessage (msg,role,listTypes,channel))
+                receive.PostAndReply(fun channel -> Message.ReceiveMessage (msg,role,channel))
             |None -> failwith " agent not instanciated yet"
                      
 
@@ -360,9 +374,9 @@ type AgentRouter(agentMap:Map<string,AgentSender>,agentReceiving:AgentReceiver) 
                     agentReceiver.ReceiveMessageAsync(message,role,listTypes,channel) // Be Carefull: message is the serialized version of the Type
                                                                                            // While replyMessage is the message really received from the network 
                     return! loop()
-                |ReceiveMessage (message,role,listTypes,channel) -> 
+                |ReceiveMessage (message,role,channel) -> 
                     printing "Receives Message : send to Agent" ""
-                    let message = agentReceiver.ReceiveMessage(message,role,listTypes,channel) // Be Carefull: message is the serialized version of the Type
+                    let message = agentReceiver.ReceiveMessage(message,role,channel) // Be Carefull: message is the serialized version of the Type
                     printing "Receives Message : reply to channel" ""
                     channel.Reply(message)                                                                                   // While replyMessage is the message really received from the network 
                     printing "Receives Message : replied to channel" ""
@@ -381,9 +395,9 @@ type AgentRouter(agentMap:Map<string,AgentSender>,agentReceiving:AgentReceiver) 
         printing "SendMessage : Post to the write role = " message
         agentRouter.Post(Message.SendMessage message)
    
-    member this.ReceiveMessage(message) =
-        let (msg,role,listTypes) = message
-        let replyMessage = agentRouter.PostAndReply(fun channel -> Message.ReceiveMessage (msg,role,listTypes,channel))
+    member this.ReceiveMessage(messageAndType) =
+        let (msg,role) = messageAndType
+        let replyMessage = agentRouter.PostAndReply(fun channel -> Message.ReceiveMessage (msg,role,channel))
         payloadChoice <- replyMessage.Tail
         replyMessage
 

@@ -175,9 +175,10 @@ let internal toList (array:_ []) =
     [for elem in array do
         yield elem ]
 
-let internal payloadsToList (payloads:ScribbleProtocole.Payload []) =
+let internal payloadsToList (payloads: System.Collections.Generic.IEnumerable<ScribbleProtocole.Payload>) =
     [for elem in payloads do
         yield elem.VarType ]
+
 
 let internal payloadsToListStr (payloads:ScribbleProtocole.Payload []) =
     [for i in 0..(payloads.Length-1) do
@@ -255,7 +256,7 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
                                                                                         
                         let listTypes = createProvidedParameters currEvent
                         let listParam = List.append [ProvidedParameter("Role_State_" + currEvent.NextState.ToString(),mRole.[currEvent.Partner])] listTypes
-                        let listPayload = (toList event.Payload)   
+                        //let listPayload = (toList event.Payload)   
                         let nextType = findProvidedType providedList (currEvent.NextState)
                         let ctor = nextType.GetConstructors().[0]
                         let exprState = Expr.NewObject(ctor, [])
@@ -297,7 +298,7 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
                             //let name = currEvent.Label.Replace("(","").Replace(")","") 
                                                                                         
                         let listTypes = createProvidedParameters currEvent
-                        let listPayload = (toList currEvent.Payload)   
+                        //let listPayload = (toList currEvent.Payload)   
                         let listParam = List.append [ProvidedParameter("Role_State_" + currEvent.NextState.ToString(),mRole.[currEvent.Partner])] listTypes
                         let nextType = findProvidedType providedList (currEvent.NextState)                                                                                 
                         let ctor = nextType.GetConstructors().[0]
@@ -346,11 +347,12 @@ let internal getAllChoiceLabels (indexList : int list) (fsmInstance:ScribbleProt
             match list with
                 |[] -> acc
                 |hd::tl -> 
-                    printfn "getAllChoiceLabels : I run"
+                    printing "getAllChoiceLabels : I run" ""
                     let label = fsmInstance.[hd].Label
                     let labelDelim,_,_ = getDelims label
                     let labelBytes = label |> serLabel <| (labelDelim.Head) 
-                    aux tl (labelBytes::acc) 
+                    let typing = fsmInstance.[hd].Payload |> List.ofArray
+                    aux tl ((labelBytes,typing)::acc) 
         in aux indexList []
 
 let internal getAllChoiceLabelString (indexList : int list) (fsmInstance:ScribbleProtocole.Root []) =
@@ -424,9 +426,14 @@ let invokeCodeOnReceive (args:Expr list) (payload: ScribbleProtocole.Payload [])
 
 let invokeCodeOnChoice (payload: ScribbleProtocole.Payload []) indexList fsmInstance role = 
     let listPayload = (payloadsToList payload) 
-    let listExpectedMessages = getAllChoiceLabels indexList fsmInstance
+    let listExpectedMessagesAndTypes  = getAllChoiceLabels indexList fsmInstance
+    let listExpectedMessages = listExpectedMessagesAndTypes |> List.map fst
+    let listExpectedTypes = listExpectedMessagesAndTypes |> List.map snd |> List.map (fun p -> payloadsToList p)
+    
+    
     <@@ 
-        let result = Regarder.receiveMessage "agent" listExpectedMessages role listPayload 
+        printing "Before Branching : " (listExpectedMessages,listExpectedTypes,listPayload)
+        let result = Regarder.receiveMessage "agent" listExpectedMessages role listExpectedTypes 
         let decode = new UTF8Encoding() 
         let labelRead = decode.GetString(result.[0]) 
         let assembly = System.Reflection.Assembly.GetExecutingAssembly() 
@@ -463,7 +470,7 @@ let generateMethod aType (methodName:string) listParam nextType (errorMessage:st
                     IsStaticMethod = false,
                     InvokeCode = 
                         fun args-> 
-                            invokeCodeOnSend args event.Payload  payloadDelim 
+                            invokeCodeOnSend args event.Payload payloadDelim 
                                 labelDelim endDelim nameLabel 
                                 exprState role fullName)
                         
@@ -582,13 +589,13 @@ let rec addProperties (providedListStatic:ProvidedTypeDefinition list) (provided
                         |"send" ->  goingThrough methodName providedListStatic aType indexList mLabel mRole fsmInstance
                         |"receive" -> goingThrough methodName providedListStatic aType indexList mLabel mRole fsmInstance 
                         |"choice" -> generateChoice aType fsmInstance currentState indexList indexOfState
+
                         |"finish" ->  goingThrough methodName providedListStatic aType indexList mLabel mRole fsmInstance 
                         | _ -> failwith "The only method name that should be available should be send/receive/choice/finish"
         |hd::tl ->  match methodName with
                         |"send" -> goingThrough methodName providedListStatic hd indexList mLabel mRole fsmInstance 
                         |"receive" -> goingThrough methodName providedListStatic hd indexList mLabel mRole fsmInstance 
                         |"choice" -> generateChoice hd fsmInstance currentState indexList indexOfState
-
                         |"finish" -> goingThrough methodName providedListStatic hd indexList mLabel mRole fsmInstance 
                         | _ -> failwith "The only type of event from the CFSM that should be available is one of the 
                                          following : send/receive/choice"
