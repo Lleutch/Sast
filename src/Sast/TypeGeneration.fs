@@ -396,6 +396,14 @@ let invokeCodeOnSend (args:Expr list) (payload: ScribbleProtocole.Payload [])  (
         Expr.Sequential(exprAction,exprState) 
 
 
+let invokeCodeOnRequest = 
+    let hello = "hello"
+    <@@ printing "In request ..." hello  @@>
+
+let invokeCodeOnAccept = 
+    let hello = "hello"
+    <@@ printing "In accept ..." hello  @@>
+
 let invokeCodeOnReceive (args:Expr list) (payload: ScribbleProtocole.Payload [])  (payloadDelim: string List) 
                        (labelDelim : string List)  (endDelim: string List)  (nameLabel:string) (message: byte[]) 
                         exprState role fullName = 
@@ -454,17 +462,19 @@ let getDocForChoice indexList fsmInstance=
     sb.Append("</summary>") |> ignore
     sb.ToString()
 
+
 let generateMethod aType (methodName:string) listParam nextType (errorMessage:string) 
                    (event: ScribbleProtocole.Root) exprState role = 
     
     let fullName = event.Label
     let nameLabel = fullName.Replace("(","").Replace(")","")
-    let labelDelim, payloadDelim, endDelim = getDelims fullName
-    let decode = new System.Text.UTF8Encoding()
-    let message = Array.append (decode.GetBytes(fullName)) (decode.GetBytes(labelDelim.Head))
 
     match methodName with
         |"send" -> 
+            let labelDelim, payloadDelim, endDelim = getDelims fullName
+            let decode = new System.Text.UTF8Encoding()
+            let message = Array.append (decode.GetBytes(fullName)) (decode.GetBytes(labelDelim.Head))
+            
             let myMethod = 
                 ProvidedMethod(methodName+nameLabel, listParam, nextType,
                     IsStaticMethod = false,
@@ -481,6 +491,10 @@ let generateMethod aType (methodName:string) listParam nextType (errorMessage:st
                 |> addMethod myMethod
                 |> ignore
         |"receive" ->  
+            let labelDelim, payloadDelim, endDelim = getDelims fullName
+            let decode = new System.Text.UTF8Encoding()
+            let message = Array.append (decode.GetBytes(fullName)) (decode.GetBytes(labelDelim.Head))
+
             let myMethod = 
                 ProvidedMethod(methodName+nameLabel,listParam,nextType,
                     IsStaticMethod = false,
@@ -499,7 +513,7 @@ let generateMethod aType (methodName:string) listParam nextType (errorMessage:st
                             let listPayload = (payloadsToList event.Payload)
                             let exprDes = deserializeAsync buffers listPayload [message] role
                             Expr.Sequential(exprDes,exprState))
-
+           
             let doc = getAssertionDoc event.Assertion
             if doc <> "" then myMethod.AddXmlDoc(doc); myMethodAsync.AddXmlDoc(doc)
                         
@@ -507,8 +521,29 @@ let generateMethod aType (methodName:string) listParam nextType (errorMessage:st
             |> addMethod myMethod
             |> addMethod myMethodAsync
             |> ignore       
+        |"request" ->
+            let myMethod = 
+                ProvidedMethod(methodName+nameLabel, listParam, nextType,
+                    IsStaticMethod = false,
+                    InvokeCode = 
+                        fun args-> 
+                            invokeCodeOnRequest) 
+            aType 
+                |> addMethod myMethod
+                |> ignore
+          
+        |"accept" ->  
+            let myMethod = 
+                ProvidedMethod(methodName+nameLabel, listParam, nextType,
+                    IsStaticMethod = false,
+                    InvokeCode = 
+                        fun args-> 
+                            invokeCodeOnAccept) 
+            aType 
+                |> addMethod myMethod
+                |> ignore
 
-            | _ -> failwith errorMessage                    
+        | _ -> failwith errorMessage                    
 
 let generateChoice (aType:ProvidedTypeDefinition) (fsmInstance: ScribbleProtocole.Root []) currentState indexList indexOfState  = 
     let assem = typeof<TypeChoices.Choice1>.Assembly
@@ -541,7 +576,7 @@ let generateMethodParams (fsmInstance:ScribbleProtocole.Root []) idx (providedLi
                 
     let listParam = 
         match methodName with
-            |"send" | "receive" -> List.append [ProvidedParameter("Role", roleValue)] listTypes
+            |"send" | "receive" | "accept" | "request" -> List.append [ProvidedParameter("Role", roleValue)] listTypes
             | _  -> []
     let makeReturnTuple = (methodName, listParam, nextType, exprState)
     makeReturnTuple
@@ -586,15 +621,14 @@ let rec addProperties (providedListStatic:ProvidedTypeDefinition list) (provided
     match providedList with
         |[] -> ()
         |[aType] -> match methodName with
-                        |"send" ->  goingThrough methodName providedListStatic aType indexList mLabel mRole fsmInstance
-                        |"receive" -> goingThrough methodName providedListStatic aType indexList mLabel mRole fsmInstance 
+                        |"send" |"receive" |"request" |"accept" 
+                            -> goingThrough methodName providedListStatic aType indexList mLabel mRole fsmInstance 
                         |"choice" -> generateChoice aType fsmInstance currentState indexList indexOfState
-
                         |"finish" ->  goingThrough methodName providedListStatic aType indexList mLabel mRole fsmInstance 
                         | _ -> failwith "The only method name that should be available should be send/receive/choice/finish"
         |hd::tl ->  match methodName with
-                        |"send" -> goingThrough methodName providedListStatic hd indexList mLabel mRole fsmInstance 
-                        |"receive" -> goingThrough methodName providedListStatic hd indexList mLabel mRole fsmInstance 
+                        |"send" |"receive" |"request" |"accept" 
+                            -> goingThrough methodName providedListStatic hd indexList mLabel mRole fsmInstance 
                         |"choice" -> generateChoice hd fsmInstance currentState indexList indexOfState
                         |"finish" -> goingThrough methodName providedListStatic hd indexList mLabel mRole fsmInstance 
                         | _ -> failwith "The only type of event from the CFSM that should be available is one of the 
