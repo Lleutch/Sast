@@ -37,6 +37,7 @@ let receiveMessage agent message role listTypes =
 let receiveChoice agent =
     dico.Item(agent).ReceiveChoice()
 
+open Microsoft.FSharp.Quotations
 let mutable cache = Map.empty<string,VarCache>
 
 let initCache name (newCache:VarCache) = 
@@ -45,8 +46,10 @@ let initCache name (newCache:VarCache) =
 let printCount name= 
         cache.Item(name).Print()
 
-let addVars name (keys: string list) (values:int[]) = 
-    keys |> List.iteri (fun i key ->  cache.Item(name).Add(key, values.[0]))
+let addVars name (keys: string list) (values:int []) = 
+    //List.zip keys values |> List.iter (fun (key, value)->  cache.Item(name).Add(key, value))
+    keys |> List.iteri (fun i key ->  cache.Item(name).Add(key, values.[i]))
 
-let addVarsBufs name (keys: string list) (values:Buf<int>[]) = 
-    keys |> List.iteri (fun i key ->  cache.Item(name).Add(key, values.[0].getValue()))
+let addVarsBufs name (keys: string list) (values:Buf<int> []) = 
+    //List.zip keys values |> List.iter (fun (key, value)->  cache.Item(name).Add(key, value))
+    keys |> List.iteri (fun i key ->  cache.Item(name).Add(key, values.[i].getValue()))

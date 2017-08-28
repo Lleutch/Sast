@@ -174,8 +174,11 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
                         
                         try                                 
                             // Configure command line
-                            let scribbleArgs = sprintf """/C %s %s -ass %s -ass-fsm %s -Z3 >> %s 2>&1 """ 
-                                                        batFile pathToFile protocol localRole tempFileName
+                            //let scribbleArgs = sprintf """/C %s %s -ass %s -ass-fsm %s -Z3 >> %s 2>&1 """ 
+                            //                            batFile pathToFile protocol localRole tempFileName
+
+                            let scribbleArgs = sprintf """/C %s %s -fsm %s %s >> %s 2>&1 """ 
+                                                           batFile pathToFile protocol localRole tempFileName
 
                             let psi = ProcessStartInfo("cmd.exe", scribbleArgs)
                             psi.UseShellExecute <- false; psi.CreateNoWindow <- true; 

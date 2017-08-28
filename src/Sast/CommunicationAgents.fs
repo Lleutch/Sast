@@ -10,11 +10,12 @@ open System
 // ScribbleProvider specific namespaces and modules
 open ScribbleGenerativeTypeProvider.DomainModel
 open System.Collections.Generic
+open Microsoft.FSharp.Quotations
 
 let isDummyVar (x:string) = x.StartsWith("_")
 
 type VarCache() =
-    let data = Dictionary<string,int>()
+    let data = Dictionary<string,_>()
     member x.RuntimeOperation() = data.Count  
       
     member x.Add(k:string, v:int) = 
@@ -31,7 +32,7 @@ type VarCache() =
     member x.Print() = 
         printf "Cache: "
         [for key in data.Keys do 
-            printf "%s -- %i " key (data.Item(key))
+            printf "%s -- %A " key (data.Item(key))
         ]
 
 

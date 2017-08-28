@@ -7,6 +7,13 @@ open FParsec
 open AssertionParsing
 open AssertionParsing.FuncGenerator
 
+
+let nextNumber = 
+    let counter = ref 0
+    fun () -> 
+        counter.Value <- !counter + 1
+        !counter
+
 let printListJson (aList:list<string*string>) =
     let length = aList.Length
     List.fold
@@ -123,12 +130,16 @@ module parserHelper =
         str_ws "label"
         >>. pstring "=" >>. spaces
         >>. pchar '\"'
-        >>. (anyCharsTillApply (pchar '!' <|> pchar '?') (fun str event -> (str,event)))
+        >>. (anyCharsTillApply (attempt (pstring "!!" <|> pstring "!" <|> pstring "??" <|> pstring "?")) (fun str event -> (str,event)))
         |>> fun (str,event) -> 
                 match event with
-                | '!' -> 
+                | "!!" -> 
+                    Partner(str),EventType("request")
+                | "??" -> 
+                    Partner(str),EventType("accept")
+                | "!" -> 
                     Partner(str),EventType("send")
-                | '?' ->
+                | "?" ->
                     Partner(str),EventType("receive")                
                 | _ ->
                     failwith "This case can never happen, if these two weren't here the flow would
@@ -146,15 +157,21 @@ module parserHelper =
         let varName = manyChars (noneOf [',';')'; ':']) 
         let unitType = ((pstring "_" >>. varName ) <|> (pstring "Unit")) |>> (fun x -> "")
         let dummyVars = (pstring "_" >>. varName ) //|>> (fun x -> "")
-        let singlePayload =
-            pipe4 (spaces >>.  varName) (pstring ":") spaces (unitType <|> varName)
-                    (fun name _ _ varType -> 
-                            if (varType<>"") 
-                                    then  (sprintf "%s" name, sprintf "%s" varType) 
-                            else sprintf "", "") // add (printf "%s:%s" varName varType) to support names variables
+        let singlePayload = 
+             attempt
+                (pipe4 (spaces >>.  varName) (pstring ":") spaces (unitType <|> varName)
+                        (fun name _ _ varType -> 
+                                if (varType<>"") 
+                                        then  (sprintf "%s" name, sprintf "%s" varType) 
+                                else sprintf "", ""))
+                <|> ((spaces >>. (unitType <|> varName)) |>> 
+                     (fun varType -> 
+                        if (varType<>"") then  (sprintf "_dummy%i" (nextNumber()), sprintf "%s" varType) 
+                        else sprintf "", ""))
+
         spaces  >>. (sepBy singlePayload (pstring ",")) .>> (pstring ")")
         |>> TrPayload           
-    //(pstring ")\"" >>. spaces >>. pstring "];" >>. spaces)
+    //(pstring ")\"" >>. spaces >>. pstring "];" >>. spaces)    
     let assertion:Parser<_,unit> =
         let endOfPayload = pstring "\"" >>. spaces >>. pstring "];" >>. spaces
         ((endOfPayload |>> fun x -> "") <|> ((pstring "@" >>. (between (pstring "\\\"")  (pstring "\\\"") expr))  .>> endOfPayload)) 
