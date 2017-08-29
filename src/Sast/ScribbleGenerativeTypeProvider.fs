@@ -80,9 +80,9 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
         DomainModel.config.Load(naming)
 
 
-        (tupleLabel |> fst) |> Regarder.ajouterLabel
+        (tupleLabel |> fst) |> Regarder.addLabel
         let agentRouter = (DomainModel.config) |> createRouter <| listOfRoles 
-        Regarder.ajouter "agent" agentRouter
+        Regarder.addAgent "agent" agentRouter
         let cache = createCache
         Regarder.initCache "cache" cache
 

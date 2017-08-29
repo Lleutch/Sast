@@ -199,7 +199,8 @@ type AgentSender(ipAddress,port) =
             |Some sending -> 
                 printing "Send Message : post to actor loop" ""
                 sending.Post(Message.SendMessage message)
-
+    
+    // this.Start should be called when we have request!
     member this.Start() = // Raise an exception due to trying to connect and parsing the IPAddress
         let tcpClientSend = new TcpClient()
         connect ipAddress port tcpClientSend
@@ -229,6 +230,7 @@ type AgentReceiver(ipAddress,port) =
         let rec loop () = async {
             let client = tcpListenerReceive.AcceptTcpClient()
             let stream = client.GetStream()
+            printing "Add a stream for role" (actor.ToString())
             // CHANGE BELOW BY READING THE ROLE IN ANOTHER Map<role:string,(IP,PORT)>
             let readRole = "hey"//readAllBytes stream
             // CHANGE ABOVE BY READING THE ROLE IN ANOTHER Map<role:string,(IP,PORT)>
@@ -351,7 +353,7 @@ type AgentReceiver(ipAddress,port) =
             |None -> failwith " agent not instanciated yet"
                      
 
-type AgentRouter(agentMap:Map<string,AgentSender>,agentReceiving:AgentReceiver) =
+type AgentRouter(agentMap:Map<string,AgentSender>, agentReceiving:AgentReceiver) =
     
     let agentMapping = agentMap
     let agentReceiver = agentReceiving
@@ -369,10 +371,10 @@ type AgentRouter(agentMap:Map<string,AgentSender>,agentReceiving:AgentReceiver) 
                     agentSender.SendMessage(message,role) // Here, message is the serialized message that needs to be sent
                     printing "Sent the message to the correct the agent that will use tcp" ""
                     return! loop()
-                |ReceiveMessageAsync (message,role,listTypes,channel) -> 
+                |ReceiveMessageAsync (message, role, listTypes, channel) -> 
                     printing "Receives Message Async : send to Agent" ""
-                    agentReceiver.ReceiveMessageAsync(message,role,listTypes,channel) // Be Carefull: message is the serialized version of the Type
-                                                                                           // While replyMessage is the message really received from the network 
+                    agentReceiver.ReceiveMessageAsync(message, role, listTypes, channel) // Be Carefull: message is the serialized version of the Type
+                                                                                          // While replyMessage is the message really received from the network 
                     return! loop()
                 |ReceiveMessage (message,role,channel) -> 
                     printing "Receives Message : send to Agent" ""
