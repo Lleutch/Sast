@@ -24,8 +24,11 @@ let getLabelType (labelRead:string) =
      
     mLabel.[labelRead]
 
-let startAgentRouter agent =
-    routerMap.Item(agent).Start()
+let startAgentRouter agent (explicitConnection:bool) =
+    routerMap.Item(agent).Start(explicitConnection)
+
+let requestRoleConnection agent role =
+    routerMap.Item(agent).RequestConnection(role)
 
 let sendMessage agent message role =
     routerMap.Item(agent).SendMessage(message,role)
@@ -39,6 +42,7 @@ let receiveMessage agent message role listTypes =
 
 let receiveChoice agent =
     routerMap.Item(agent).ReceiveChoice()
+
 
 open Microsoft.FSharp.Quotations
 let mutable cache = Map.empty<string,VarCache>

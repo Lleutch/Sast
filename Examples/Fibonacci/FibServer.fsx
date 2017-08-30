@@ -14,10 +14,10 @@ let typeAliasing =
     """ [ {"alias" : "int", "type": "System.Int32"} ] """
 
 type Fib = 
-    Provided.TypeProviderFile<"../../../Examples/Fibonacci/FibnoAss.scr"
+    Provided.TypeProviderFile<"../../../Examples/ConnectExample/FibnoAss.scr"
                                ,"Adder"
                                ,"S"
-                               ,"../../../Examples/Fibonacci/configServer.yaml"
+                               ,"../../../Examples/ConnectExample/configServer.yaml"
                                ,Delimiter=delims
                                ,TypeAliasing=typeAliasing
                                ,ScribbleSource = ScribbleSource.LocalExecutable>
@@ -26,11 +26,11 @@ type Fib =
 let numIter = 10-2
 let C = Fib.C.instance
 
-let rec fibServer (c0:Fib.State21) =
+let rec fibServer (c:Fib.State27) =
     let res1 = new DomainModel.Buf<int>()
     let res2 = new DomainModel.Buf<int>()
-    let c = c0.receiveHELLO(C, res1)
-    printfn"received Hello %i" (res1.getValue())
+    //let c = c0.receiveHELLO(C, res1)
+    //printfn"received Hello %i" (res1.getValue())
 
     match c.branch() with 
         | :? Fib.BYE as bye-> 
@@ -42,7 +42,9 @@ let rec fibServer (c0:Fib.State21) =
             fibServer c1
 
 let session = new Fib()
-let sessionCh = session.Start()
+let dummy = new DomainModel.Buf<int>()
+
+let sessionCh = session.Start().accept(C).receiveHELLO(C, dummy)
 
 //let branch =  sessionCh.branch() 
 fibServer(sessionCh)
@@ -62,4 +64,5 @@ let rec fibrec a b iter (c:Fib.State14) =
 let fibo = new Fib()
 let first = fibo.Start()
 first |> fibrec 1 1 numIter
+
 *)

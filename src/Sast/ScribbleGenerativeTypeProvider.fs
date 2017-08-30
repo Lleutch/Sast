@@ -91,10 +91,9 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
         let ctor = firstStateType.GetConstructors().[0]                                                               
         let ctorExpr = Expr.NewObject(ctor, [])
         let exprCtor = ctorExpr
-        let exprStart = <@@ Regarder.startAgentRouter "agent" @@>
+        let exprStart = <@@ Regarder.startAgentRouter "agent" true @@>
         let expression = Expr.Sequential(exprStart,exprCtor)
             
-
         let ty = name 
                     |> createProvidedType tmpAsm
                     |> addCstor ( <@@ "hey" + string n @@> |> createCstor [])
