@@ -20,7 +20,8 @@ type Fib =
                                ,"../../../Examples/ConnectExample/configServer.yaml"
                                ,Delimiter=delims
                                ,TypeAliasing=typeAliasing
-                               ,ScribbleSource = ScribbleSource.LocalExecutable>
+                               ,ScribbleSource = ScribbleSource.LocalExecutable, 
+                               ExplicitConnection=true>
 
 
 let numIter = 10-2
@@ -44,7 +45,8 @@ let rec fibServer (c:Fib.State27) =
 let session = new Fib()
 let dummy = new DomainModel.Buf<int>()
 
-let sessionCh = session.Start().accept(C).receiveHELLO(C, dummy)
+let r = new DomainModel.Buf<int>()
+let sessionCh = session.Start().accept(C).receiveHELLO(C, r)
 
 //let branch =  sessionCh.branch() 
 fibServer(sessionCh)

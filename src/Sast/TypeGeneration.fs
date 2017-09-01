@@ -396,13 +396,25 @@ let invokeCodeOnSend (args:Expr list) (payload: ScribbleProtocole.Payload [])  (
         Expr.Sequential(exprAction,exprState) 
 
 
-let invokeCodeOnRequest = 
+let invokeCodeOnRequest role exprState= 
     let hello = "hello"
-    <@@ printing "In request ..." hello  @@>
+    let exprNext = 
+        <@@ printing "in request" role  @@>
+    let exprState = 
+        Expr.Sequential(exprNext,exprState)
+    let exprNext = 
+        <@@ Regarder.requestConnection "agent" role @@>
+    Expr.Sequential(exprNext,exprState)
 
-let invokeCodeOnAccept = 
+let invokeCodeOnAccept role exprState= 
     let hello = "hello"
-    <@@ printing "In accept ..." hello  @@>
+    let exprNext = 
+        <@@ printing "in accept" role  @@>
+    let exprState = 
+        Expr.Sequential(exprNext,exprState)
+    let exprNext = 
+        <@@ Regarder.acceptConnection "agent" role @@>
+    Expr.Sequential(exprNext,exprState)
 
 let invokeCodeOnReceive (args:Expr list) (payload: ScribbleProtocole.Payload [])  (payloadDelim: string List) 
                        (labelDelim : string List)  (endDelim: string List)  (nameLabel:string) (message: byte[]) 
@@ -527,7 +539,7 @@ let generateMethod aType (methodName:string) listParam nextType (errorMessage:st
                     IsStaticMethod = false,
                     InvokeCode = 
                         fun args-> 
-                            invokeCodeOnRequest) 
+                            invokeCodeOnRequest role exprState) 
             aType 
                 |> addMethod myMethod
                 |> ignore
@@ -538,7 +550,7 @@ let generateMethod aType (methodName:string) listParam nextType (errorMessage:st
                     IsStaticMethod = false,
                     InvokeCode = 
                         fun args-> 
-                            invokeCodeOnAccept) 
+                            invokeCodeOnAccept role exprState) 
             aType 
                 |> addMethod myMethod
                 |> ignore
@@ -578,6 +590,8 @@ let generateMethodParams (fsmInstance:ScribbleProtocole.Root []) idx (providedLi
         match methodName with
             |"send" | "receive" | "accept" | "request" -> List.append [ProvidedParameter("Role", roleValue)] listTypes
             | _  -> []
+
+
     let makeReturnTuple = (methodName, listParam, nextType, exprState)
     makeReturnTuple
 

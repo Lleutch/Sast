@@ -35,7 +35,8 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
         let configFilePath = parameters.[0]  :?> string
         let delimitaters = parameters.[1]  :?> string
         let typeAliasing = parameters.[2] :?> string
-
+        let explicitConnection = parameters.[4] :?> bool
+        
         let fsm = 
             let aliases = DotNetTypesMapping.Parse(typeAliasing)
             let mutable prot = fsm
@@ -81,8 +82,8 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
 
 
         (tupleLabel |> fst) |> Regarder.addLabel
-        let agentRouter = (DomainModel.config) |> createRouter <| listOfRoles 
-        Regarder.addAgent "agent" agentRouter
+        let agentRouter = createRouter (DomainModel.config)  listOfRoles explicitConnection
+        Regarder.addAgent "agent" agentRouter 
         let cache = createCache
         Regarder.initCache "cache" cache
 
@@ -91,7 +92,7 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
         let ctor = firstStateType.GetConstructors().[0]                                                               
         let ctorExpr = Expr.NewObject(ctor, [])
         let exprCtor = ctorExpr
-        let exprStart = <@@ Regarder.startAgentRouter "agent" true @@>
+        let exprStart = <@@ Regarder.startAgentRouter "agent"  @@>
         let expression = Expr.Sequential(exprStart,exprCtor)
             
         let ty = name 
@@ -222,7 +223,8 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
                           ProvidedStaticParameter("Config",typeof<string>);
                           ProvidedStaticParameter("Delimiter",typeof<string>);
                           ProvidedStaticParameter("TypeAliasing",typeof<string>); 
-                          ProvidedStaticParameter("ScribbleSource",typeof<ScribbleSource>); ]
+                          ProvidedStaticParameter("ScribbleSource",typeof<ScribbleSource>);
+                          ProvidedStaticParameter("ExplicitConnection",typeof<bool>); ]
                          (* ProvidedStaticParameter("SerializeMessagePath",typeof<string*string>);
                           ProvidedStaticParameter("DeserializeMessagePath",typeof<string*string>);
                           ProvidedStaticParameter("DerializeChoicePath",typeof<string*string>)]*)

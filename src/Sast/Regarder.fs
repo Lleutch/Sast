@@ -24,10 +24,13 @@ let getLabelType (labelRead:string) =
      
     mLabel.[labelRead]
 
-let startAgentRouter agent (explicitConnection:bool) =
-    routerMap.Item(agent).Start(explicitConnection)
+let startAgentRouter agent =
+    routerMap.Item(agent).Start()
 
-let requestRoleConnection agent role =
+let acceptConnection agent role =
+    routerMap.Item(agent).AcceptConnection(role)
+
+let requestConnection agent role =
     routerMap.Item(agent).RequestConnection(role)
 
 let sendMessage agent message role =

@@ -17,21 +17,21 @@ let typeAliasing =
 
 // C:/cygwin64/home/rhu/code/vs/scribble/github.com/rumineykova/Sast/Examples/Fibonacci/
 type Fib = 
-    Provided.TypeProviderFile<"../../../Examples/ConnectExample/FibnoAss.scr" // Fully specified path to the scribble file
+    Provided.TypeProviderFile<"../../../Examples/Fibonacci/FibnoAss.scr" // Fully specified path to the scribble file
                                ,"Adder" // name of the protocol
                                ,"C" // local role
-                               ,"../../../Examples/ConnectExample/config.yaml" // config file containing IP and port for each role and the path to the scribble script
+                               ,"../../../Examples/Fibonacci/config.yaml" // config file containing IP and port for each role and the path to the scribble script
                                ,Delimiter=delims 
                                ,TypeAliasing=typeAliasing // give mapping from scribble base files to F# types
-                               ,ScribbleSource = ScribbleSource.LocalExecutable // choose one of the following options: (LocalExecutable | WebAPI | File)
-                              >
+                               ,ScribbleSource = ScribbleSource.LocalExecutable, // choose one of the following options: (LocalExecutable | WebAPI | File)
+                               ExplicitConnection=false>
 
 let numIter = 3
 let S = Fib.S.instance
-let rec fibrec a b iter (c:Fib.State13) = 
+let rec fibrec a b iter (c0:Fib.State9) = 
             let res = new DomainModel.Buf<int>()
             printfn "number of iter: %d" (numIter - iter)
-            //let c = c0.request(S).sendHELLO(S, a)
+            let c = c0.sendHELLO(S, a)
             match iter with
                 |0 -> 
                     let c1 = c.sendBYE(S)
@@ -47,7 +47,7 @@ let rec fibrec a b iter (c:Fib.State13) =
                     fibrec b (res.getValue()) (n-1) c2
 
 let fibo = new Fib()
-let first = fibo.Start().request(S).sendHELLO(S, 1)
+let first = fibo.Start()
 
 first |> fibrec 1 1 numIter
 
