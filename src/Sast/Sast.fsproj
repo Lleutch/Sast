@@ -81,6 +81,7 @@
       <Paket>True</Paket>
     </Compile>
     <Compile Include="AssemblyInfo.fs" />
+    <Compile Include="RefinementTypes.fs" />
     <Compile Include="DomainModel.fs" />
     <Compile Include="TypeChoices.fs" />
     <Compile Include="Runtime.fs" />

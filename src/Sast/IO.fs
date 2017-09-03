@@ -12,6 +12,8 @@ open ScribbleGenerativeTypeProvider.CommunicationAgents
 open System.Threading.Tasks
 
 
+/// this way of defining failures can be used in an exception raising manner
+/// or in a RoP manner if at then of the day we can raise IFailure or RoP on IFailure
 type IOFailures =
     | Encoding of string*Exception
     | SerializationPayload of obj*string
@@ -34,9 +36,6 @@ let toBytes (str : string) =
         Encoding (str,e) |> createFailure
 
 //
-//let writeBytes (outputStream : Stream) (buf : byte[])  =
-//    let dos = new BinaryWriter(outputStream)
-//    dos.Write(buf)
 
 // Serialization + Deserialization + DesAsync + DesChoice
 // Currently only working for basic types.
@@ -46,36 +45,67 @@ let serLabel (label:string) (delim:string) =
     let delimBytes = delim |> toBytes
     delimBytes |> Array.append labelBytes
 
-let serPayloads (args:Expr list) (listTypes:string list) (payloadDelim:string) (endDelim:string) =
+let serPayloads (args:Expr list) (listTypes:string list) (payloadDelim:string) (endDelim:string) (argsNames:string list) foo =
     let listPayloads =  
         args 
         |> List.mapi (fun i arg -> 
             let currentType = listTypes.[i]
+            let argName = 
+                if foo <> "" then
+                    argsNames.[i]
+                else
+                    ""
             match currentType with
             |"System.String" | "System.Char"-> 
                 <@  
                     let spliced = %%(Expr.Coerce(arg,typeof<obj>))
-                    try
-                        Type.GetType("System.Text.UTF8Encoding")
-                            .GetMethod("GetBytes",[|Type.GetType(currentType)|])
-                            .Invoke(new UTF8Encoding(),[|spliced|]) |> unbox<byte []> 
-                    with
-                    | _ -> 
-                        printing "Failed to serialize 1" ""
-                        SerializationPayload (spliced,currentType) |> createFailure
+
+                    let ranFoo = 
+                        // No Assertion provided
+                        if foo <> "" then 
+                            RefinementTypes.RefinementTypes.addArgValue argName spliced
+                            RefinementTypes.RefinementTypes.runFooFunction foo
+                        else
+                            Some true
+                    match ranFoo with
+                    | None -> failwith "Incorrect type evaluated : Either not enough argument given to the assertion or the assertion is not a function that returns a boolean"
+                    | Some false -> failwith "Assertion Constraint not met"
+                    | Some true ->
+
+                        try
+                            Type.GetType("System.Text.UTF8Encoding")
+                                .GetMethod("GetBytes",[|Type.GetType(currentType)|])
+                                .Invoke(new UTF8Encoding(),[|spliced|]) |> unbox<byte []> 
+                        with
+                        | _ -> 
+                            printing "Failed to serialize 1" ""
+                            SerializationPayload (spliced,currentType) |> createFailure
                             
                 @>
             | _ -> 
                 <@ 
                     let spliced = %%(Expr.Coerce(arg,typeof<obj>))
-                    try
-                        Type.GetType("System.BitConverter")
-                            .GetMethod("GetBytes",[|Type.GetType(currentType)|])
-                            .Invoke(null,[|spliced|] ) |> unbox<byte []> 
-                    with
-                    | _ -> 
-                        printing "Failed to serialize 2" ""
-                        SerializationPayload (spliced,currentType) |> createFailure   
+
+                    let ranFoo = 
+                        // No Assertion provided
+                        if foo <> "" then 
+                            RefinementTypes.RefinementTypes.addArgValue argName spliced
+                            RefinementTypes.RefinementTypes.runFooFunction foo
+                        else
+                            Some true
+                    match ranFoo with
+                    | None -> failwith "Incorrect type evaluated : Either not enough argument given to the assertion or the assertion is not a function that returns a boolean"
+                    | Some false -> failwith "Assertion Constraint not met"
+                    | Some true ->
+
+                        try
+                            Type.GetType("System.BitConverter")
+                                .GetMethod("GetBytes",[|Type.GetType(currentType)|])
+                                .Invoke(null,[|spliced|] ) |> unbox<byte []> 
+                        with
+                        | _ -> 
+                            printing "Failed to serialize 2" ""
+                            SerializationPayload (spliced,currentType) |> createFailure   
                 @> 
            ) 
 
@@ -102,24 +132,13 @@ let serPayloads (args:Expr list) (listTypes:string list) (payloadDelim:string) (
        ) <@ [||] @> <| listDelims
 
 
-//let serialize (label:string) (args:Expr list) (listTypes:string list) (payloadDelim:string) (endDelim:string) (labelDelim:string) =
-//    let labelSerialized = <@ serLabel label labelDelim @>
-//    let payloadSerialized = serPayloads args listTypes payloadDelim endDelim 
-//    <@ 
-//        result{
-//            let! labelSerialized = %labelSerialized 
-//            let! payloadSerialized = %payloadSerialized
-//            return Array.append labelSerialized payloadSerialized 
-//        }
-//    @>
-
-let serialize (label:string) (args:Expr list) (listTypes:string list) (payloadDelim:string) (endDelim:string) (labelDelim:string) =
+let serialize (label:string) (args:Expr list) (listTypes:string list) (payloadDelim:string) (endDelim:string) (labelDelim:string) argsNames foo =
     let labelSerialized = <@ serLabel label labelDelim @> // 
                              
 //    let payloadSerialized = serPayloads args listTypes payloadDelim endDelim 
     <@  
         printing "About to serialized" ""
-        let payloadSerialized = %( serPayloads args listTypes payloadDelim endDelim )
+        let payloadSerialized = %( serPayloads args listTypes payloadDelim endDelim argsNames foo)
         let labelSerialized  = %(labelSerialized) 
         printing "Serialization done" ""
         Array.append labelSerialized payloadSerialized 
@@ -143,7 +162,7 @@ let convert (arrayList:byte[] list) (elemTypelist:string list) =
                         
     aux arrayList elemTypelist []
    
-let deserialize (args: Expr list)  (listTypes:string list) (messages: _ list) (role:string) =
+let deserialize (args: Expr list) (listTypes:string list) (messages: _ list) (role:string) (argsNames:string list) foo =
     let buffer = [for elem in args do
                     yield Expr.Coerce(elem,typeof<ISetResult>) ]
 
@@ -153,12 +172,28 @@ let deserialize (args: Expr list)  (listTypes:string list) (messages: _ list) (r
         printing " received Bytes: " result
             
         let received = convert (result.Tail) listTypes 
-        let received = List.toSeq received
-        Runtime.setResults received (%%(Expr.NewArray(typeof<ISetResult>, buffer)):ISetResult []) 
+
+        let ranFoo = 
+            // No Assertion provided
+            if foo <> "" then 
+                (argsNames,received)
+                ||> List.map2(fun argName rcv -> RefinementTypes.RefinementTypes.addArgValue argName rcv )
+                |> ignore
+                RefinementTypes.RefinementTypes.runFooFunction foo
+            else
+                Some true
+
+        match ranFoo with
+        | None -> failwith "Incorrect type evaluated : Either not enough argument given to the assertion or the assertion is not a function that returns a boolean"
+        | Some false -> failwith "Assertion Constraint not met"
+        | Some true ->
+
+            let received = List.toSeq received
+            Runtime.setResults received (%%(Expr.NewArray(typeof<ISetResult>, buffer)):ISetResult []) 
     @>
                  
 
-let deserializeAsync (args: Expr list)  (listTypes:string list) (messages: _ list) (role:string) =  
+let deserializeAsync (args: Expr list)  (listTypes:string list) (messages: _ list) (role:string) argsNames foo =  
     let buffer = [for elem in args do
                     yield Expr.Coerce(elem,typeof<ISetResult>) ]              
     <@ 
@@ -167,24 +202,54 @@ let deserializeAsync (args: Expr list)  (listTypes:string list) (messages: _ lis
                 let! res = Regarder.receiveMessageAsync "agent" messages role listTypes 
                 let res =
                     let received = (res.Tail |> convert <| listTypes )
-                    let received = received |> List.toSeq          
-                    Runtime.setResults received (%%(Expr.NewArray(typeof<ISetResult>, buffer)):ISetResult []) 
+
+                    let ranFoo = 
+                        // No Assertion provided
+                        if foo <> "" then 
+                            (argsNames,received)
+                            ||> List.map2(fun argName rcv -> RefinementTypes.RefinementTypes.addArgValue argName rcv )
+                            |> ignore
+                            RefinementTypes.RefinementTypes.runFooFunction foo
+                        else
+                            Some true
+                    match ranFoo with
+                    | None -> failwith "Incorrect type evaluated : Either not enough argument given to the assertion or the assertion is not a function that returns a boolean"
+                    | Some false -> failwith "Assertion Constraint not met"
+                    | Some true ->
+
+                        let received = received |> List.toSeq          
+                        Runtime.setResults received (%%(Expr.NewArray(typeof<ISetResult>, buffer)):ISetResult []) 
                 return res
             }
         Async.Start(work)
      @>
 
 
-let deserializeChoice (args: Expr list) (listTypes:string list) =
+let deserializeChoice (args: Expr list) (listTypes:string list) argsNames foo =
     let buffer = [for elem in args do
                     yield Expr.Coerce(elem,typeof<ISetResult>) ]
     <@ 
         let result = Regarder.receiveChoice "agent" 
         let received = (result |> convert <| listTypes ) 
-        let received = received |> List.toSeq          
-        //let received = result |> List.toSeq
-        let test = (%%(Expr.NewArray(typeof<ISetResult>, buffer)):ISetResult []) 
-        let completed = test |> Array.map(fun t -> t.GetTask())
-        printing "Receive a choice" (received,test,completed)
-        Runtime.setResults received (%%(Expr.NewArray(typeof<ISetResult>, buffer)):ISetResult []) 
+
+        let ranFoo = 
+            // No Assertion provided
+            if foo <> "" then 
+                (argsNames,received)
+                ||> List.map2(fun argName rcv -> RefinementTypes.RefinementTypes.addArgValue argName rcv )
+                |> ignore
+                RefinementTypes.RefinementTypes.runFooFunction foo
+            else
+                Some true
+
+        match ranFoo with
+        | None -> failwith "Incorrect type evaluated : Either not enough argument given to the assertion or the assertion is not a function that returns a boolean"
+        | Some false -> failwith "Assertion Constraint not met"
+        | Some true ->
+
+            let received = received |> List.toSeq
+            let test = (%%(Expr.NewArray(typeof<ISetResult>, buffer)):ISetResult []) 
+            let completed = test |> Array.map(fun t -> t.GetTask())
+            printing "Receive a choice" (received,test,completed)
+            Runtime.setResults received (%%(Expr.NewArray(typeof<ISetResult>, buffer)):ISetResult []) 
     @>

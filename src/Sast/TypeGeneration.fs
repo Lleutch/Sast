@@ -12,6 +12,7 @@ open FSharp.Quotations.Evaluator
 open ScribbleGenerativeTypeProvider.DomainModel
 open ScribbleGenerativeTypeProvider.CommunicationAgents
 open ScribbleGenerativeTypeProvider.IO
+open ScribbleGenerativeTypeProvider.RefinementTypes
 
 (******************* TYPE PROVIDER'S HELPERS *******************)
 
@@ -262,16 +263,20 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
                                             fun args-> 
                                                 let buffers = args.Tail.Tail
                                                 let listPayload = (toList event.Payload)
-                                                let exprDes = deserializeChoice buffers listPayload
+                                                
+                                                let assertionString = event.Assertion
+
+                                                let fooName,argsName = 
+                                                    if assertionString <> "" then
+                                                        let index = RefinementTypes.dictFunInfos.Count                                                            
+                                                        let assertion = RefinementTypes.createFnRule index assertionString
+                                                        assertion |> fst |> RefinementTypes.addToDict
+                                                        snd assertion 
+                                                    else 
+                                                        "",[]
+
+                                                let exprDes = deserializeChoice buffers listPayload argsName fooName
                                                 Expr.Sequential(exprDes,exprState)
-//                                                <@@
-//                                                    result{
-//                                                        do! %(deserializeChoice buffers listPayload)
-//                                                        let data = %%Expr.Coerce(exprState,typeof<obj>) 
-//                                                        return data
-//                                                        //Expr.Sequential(exprDes,exprState) 
-//                                                    }
-//                                                @@>
                                           )
                                                                                                                                                 
                         t <- t |> addMethod (myMethod)
@@ -310,18 +315,21 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
                                                 fun args-> 
                                                     let buffers = args.Tail.Tail
                                                     let listPayload = (toList event.Payload)
-                                                    let exprDes = deserializeChoice buffers listPayload
+
+                                                    let assertionString = event.Assertion
+
+                                                    let fooName,argsName = 
+                                                        if assertionString <> "" then
+                                                            let index = RefinementTypes.dictFunInfos.Count                                                            
+                                                            let assertion = RefinementTypes.createFnRule index assertionString
+                                                            assertion |> fst |> RefinementTypes.addToDict
+                                                            snd assertion 
+                                                        else 
+                                                            "",[]
+
+                                                    let exprDes = deserializeChoice buffers listPayload argsName fooName
                                                     Expr.Sequential(exprDes,exprState)
-//                                                    <@@
-//                                                        result{
-//                                                            do! %(deserializeChoice buffers listPayload)
-//                                                            let data = %%Expr.Coerce(exprState,typeof<obj>)  
-//                                                            return data
-//                                                            //Expr.Sequential(exprDes,exprState) 
-//                                                        }
-//                                                    @@>
-//                                                    let exprDes = deserializeChoice buffers listPayload
-//                                                    Expr.Sequential(exprDes,exprState) 
+
                                           )
 
                         t <- t |> addMethod (myMethod)
@@ -338,13 +346,6 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
                 in aux listIndexChoice 
             | _ -> failwith ("number of choices > " + TypeChoices.NUMBER_OF_CHOICES.ToString() + " : This protocol won't be taken in account by this TP. ") 
 
-        (*else if not(alreadySeenOnlyLabel listeLabelSeen event.Label) then // THIS IS IF WE WANT LABELS BACK AS ARGUMENT OF THE RECEIVE AND SEND METHODS
-            let name = event.Label.Replace("(","").Replace(")","") 
-            let t = name |> createProvidedIncludedType
-                         |> addCstor (<@@ name :> obj @@> |> createCstor [])
-            mapping <- mapping.Add(event.Label,t)
-            listeLabelSeen <- (event.Label,event.CurrentState)::listeLabelSeen
-            listeType <- ( t :> System.Type )::listeType*)
     (mapping,listeType)
 
 
@@ -383,7 +384,6 @@ let rec goingThrough (methodNaming:string) (providedList:ProvidedTypeDefinition 
                     match methodName with
                         |"send" | "receive" -> List.append [ProvidedParameter("Role",mRole.[role])] listTypes
                         | _  -> []
-                //let a,b,c= DomainModel.mappingDelimitateur.[fullName]
                 let nameLabel = fullName.Replace("(","").Replace(")","") 
                 match methodName with
                     |"send" -> let myMethod = 
@@ -392,11 +392,21 @@ let rec goingThrough (methodNaming:string) (providedList:ProvidedTypeDefinition 
                                                 InvokeCode = 
                                                     fun args -> 
                                                         let buffers = args.Tail.Tail
-//                                                        let buf = serialize fullName buffers (toList event.Payload) (payloadDelim.Head) (endDelim.Head) (labelDelim.Head) 
-                                                        //let buf = serializeMessage fullName (toList event.Payload) buffers
+
+                                                        let assertionString = event.Assertion
+
+                                                        let fooName,argsName = 
+                                                            if assertionString <> "" then
+                                                                let index = RefinementTypes.dictFunInfos.Count                                                            
+                                                                let assertion = RefinementTypes.createFnRule index assertionString
+                                                                assertion |> fst |> RefinementTypes.addToDict
+                                                                snd assertion 
+                                                            else 
+                                                                "",[]
+
                                                         let exprAction = 
                                                             <@@ 
-                                                                let buf = %(serialize fullName buffers (toList event.Payload) (payloadDelim.Head) (endDelim.Head) (labelDelim.Head) )
+                                                                let buf = %(serialize fullName buffers (toList event.Payload) (payloadDelim.Head) (endDelim.Head) (labelDelim.Head) argsName fooName)
                                                                 Regarder.sendMessage "agent" (buf:byte[]) role 
                                                             @@>
                                                         let fn eq =
@@ -410,59 +420,6 @@ let rec goingThrough (methodNaming:string) (providedList:ProvidedTypeDefinition 
                                                             Expr.Sequential(<@@ %(fn false) @@>,exprAction)
                                                         Expr.Sequential(exprAction,exprState) )
                                                
-//                                               IsStaticMethod = false,
-//                                               InvokeCode = 
-//                                                fun args-> 
-//                                                    let buffers = args.Tail.Tail
-//                                                    //let buf = ser buffers
-//                                                    let payloads = toList event.Payload
-//                                                    let pDelim = payloadDelim.Head
-//                                                    let eDelim = endDelim.Head
-//                                                    let lDelim = labelDelim.Head
-////                                                    let buf = serialize fullName buffers payloads pDelim eDelim lDelim 
-////                                                    let stuff = 5
-////                                                    let buffers = (Expr.NewArray(typeof<obj>,buffers))
-//                                                    let expr =
-//                                                        <@@
-//                                                            result{
-//                                                                let! buf = %(serialize fullName buffers payloads pDelim eDelim lDelim)
-//    //                                                            let buf:byte [] = [||]
-//    //                                                            let! buf = %(serialize fullName buffers payloads pDelim eDelim lDelim)
-//                                                                Regarder.sendMessage "agent" buf role 
-//                                                                printfn "Message sent completly"
-//                                                                let data = %(Expr.Cast(Expr.Coerce(Expr.NewObject(c, []), typeof<obj>)))
-////                                                                let data = %%(Expr.NewObject(c, []))//, nextType))
-////                                                                let data = %(Expr.Cast(Expr.NewObject(c, [])))//, nextType))
-//    //                                                            let data = %%(exprState) // Expr.Coerce(exprState,typeof<obj>)  
-//    //                                                            let data = %%Expr.Coerce(exprState,nextType) 
-//                                                                printfn "Object casted %A" data
-//                                                                return data
-//                                                                //Expr.Sequential(exprDes,exprState) 
-//                                                            }
-//                                                        @@>
-////                                                    Expr.Call(Expr.s)
-//                                                    let test = expr.ToString()
-//                                                    expr
-//                                                    let mi = tyType.GetMethod("Cast", BindingFlags.Public ||| BindingFlags.Static)
-//                                                    let exprFin = Expr.Call(mi,[expr])
-//                                                    exprFin
-//                                                    let expr =
-//                                                        <@@
-//                                                            result{
-//                                                                let! buf = %(serialize fullName buffers payloads pDelim eDelim lDelim)
-//    //                                                            let buf:byte [] = [||]
-//    //                                                            let! buf = %(serialize fullName buffers payloads pDelim eDelim lDelim)
-//                                                                Regarder.sendMessage "agent" buf role 
-//                                                                printfn "Message sent completly"
-//                                                                let data = %%(Expr.NewObject(c, []))
-//    //                                                            let data = %%(exprState) // Expr.Coerce(exprState,typeof<obj>)  
-//    //                                                            let data = %%Expr.Coerce(exprState,nextType) 
-//                                                                printfn "Object casted %A" data
-//                                                                return data
-//                                                                //Expr.Sequential(exprDes,exprState) 
-//                                                            }
-//                                                        @@>
-//                                                    Expr.Coerce(expr,typeof<obj>)
                                               
                                aType 
                                     |> addMethod myMethod
@@ -474,7 +431,20 @@ let rec goingThrough (methodNaming:string) (providedList:ProvidedTypeDefinition 
                                                         fun args-> 
                                                             let buffers = args.Tail.Tail
                                                             let listPayload = (toList event.Payload)
-                                                            let exprDes = deserialize buffers listPayload [message] role
+
+                                                            let assertionString = event.Assertion
+                                                            
+                                                            let fooName,argsName = 
+                                                                if assertionString <> "" then
+                                                                    let index = RefinementTypes.dictFunInfos.Count                                                            
+                                                                    let assertion = RefinementTypes.createFnRule index assertionString
+                                                                    assertion |> fst |> RefinementTypes.addToDict
+                                                                    snd assertion 
+                                                                else 
+                                                                    "",[]
+                                                                    
+
+                                                            let exprDes = deserialize buffers listPayload [message] role argsName fooName
                                                             let exprDes = 
                                                                 Expr.Sequential(<@@ printing "METHOD USED : Receive + Label = " nameLabel @@>,exprDes)
                                                             Expr.Sequential(exprDes,exprState) 
@@ -486,7 +456,20 @@ let rec goingThrough (methodNaming:string) (providedList:ProvidedTypeDefinition 
                                                         fun args-> 
                                                             let buffers = args.Tail.Tail
                                                             let listPayload = (toList event.Payload)
-                                                            let exprDes = deserializeAsync buffers listPayload [message] role
+
+                                                            let assertionString = event.Assertion
+
+                                                            let fooName,argsName = 
+                                                                if assertionString <> "" then
+                                                                    let index = RefinementTypes.dictFunInfos.Count                                                            
+                                                                    let assertion = RefinementTypes.createFnRule index assertionString
+                                                                    assertion |> fst |> RefinementTypes.addToDict
+                                                                    snd assertion 
+                                                                else 
+                                                                    "",[]
+
+
+                                                            let exprDes = deserializeAsync buffers listPayload [message] role argsName fooName
                                                             Expr.Sequential(exprDes,exprState) 
                                                   )
                                    aType 
@@ -527,10 +510,22 @@ let rec goingThrough (methodNaming:string) (providedList:ProvidedTypeDefinition 
                                             InvokeCode = 
                                                 fun args-> 
                                                     let buffers = args.Tail.Tail
-                                                    //let buf = ser buffers
+
+                                                    let assertionString = event.Assertion
+
+                                                    let fooName,argsName = 
+                                                        if assertionString <> "" then
+                                                            let index = RefinementTypes.dictFunInfos.Count                                                            
+                                                            let assertion = RefinementTypes.createFnRule index assertionString
+                                                            assertion |> fst |> RefinementTypes.addToDict
+                                                            snd assertion 
+                                                        else 
+                                                            "",[]
+
+
                                                     let exprAction = 
                                                         <@@ 
-                                                            let buf = %(serialize fullName buffers (toList event.Payload) (payloadDelim.Head) (endDelim.Head) (labelDelim.Head) )
+                                                            let buf = %(serialize fullName buffers (toList event.Payload) (payloadDelim.Head) (endDelim.Head) (labelDelim.Head) argsName fooName)
                                                             Regarder.sendMessage "agent" (buf:byte[]) role 
                                                         @@>
                                                     let fn eq =
@@ -554,7 +549,18 @@ let rec goingThrough (methodNaming:string) (providedList:ProvidedTypeDefinition 
                                                         fun args-> 
                                                             let buffers = args.Tail.Tail
                                                             let listPayload = (toList event.Payload)
-                                                            let exprDes = deserialize buffers listPayload [message] role
+
+                                                            let assertionString = event.Assertion
+                                                            let fooName,argsName = 
+                                                                if assertionString <> "" then
+                                                                    let index = RefinementTypes.dictFunInfos.Count                                                            
+                                                                    let assertion = RefinementTypes.createFnRule index assertionString
+                                                                    assertion |> fst |> RefinementTypes.addToDict
+                                                                    snd assertion 
+                                                                else 
+                                                                    "",[]
+                                                            
+                                                            let exprDes = deserialize buffers listPayload [message] role argsName fooName
                                                             let exprDes = 
                                                                 Expr.Sequential(<@@ printing "METHOD USED : Receive + Label = " nameLabel @@>,exprDes)
                                                             Expr.Sequential(exprDes,exprState) 
@@ -567,7 +573,18 @@ let rec goingThrough (methodNaming:string) (providedList:ProvidedTypeDefinition 
                                                         fun args -> 
                                                             let buffers = args.Tail.Tail
                                                             let listPayload = (toList event.Payload)
-                                                            let exprDes = deserializeAsync buffers listPayload [message] role
+
+                                                            let assertionString = event.Assertion
+                                                            let fooName,argsName = 
+                                                                if assertionString <> "" then
+                                                                    let index = RefinementTypes.dictFunInfos.Count                                                            
+                                                                    let assertion = RefinementTypes.createFnRule index assertionString
+                                                                    assertion |> fst |> RefinementTypes.addToDict
+                                                                    snd assertion 
+                                                                else 
+                                                                    "",[]
+
+                                                            let exprDes = deserializeAsync buffers listPayload [message] role argsName fooName
                                                             Expr.Sequential(exprDes,exprState) 
                                                   )
                                    aType 
