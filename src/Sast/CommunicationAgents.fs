@@ -255,7 +255,7 @@ type AgentReceiver(ipAddress,port, roles: string list) =
                                 System.Console.WriteLine(" I AM WAITING FOR CANCELLATION !!!!")
                                 System.Console.WriteLine(clientMap.Count)
                                 System.Console.WriteLine(" For role" + str)
-                                Async.RunSynchronously(Async.Sleep 100)
+                                Async.RunSynchronously(Async.Sleep 1000)
                                 waitForCancellation str (count-1)
                            else
                                 ()
@@ -320,7 +320,7 @@ type AgentReceiver(ipAddress,port, roles: string list) =
                     let fakeRole = role
                     printing "Check ClientMap :" clientMap
                     if not(clientMap.ContainsKey(fakeRole)) then
-                        waitForCancellation fakeRole 30 |> ignore // Change th number
+                        waitForCancellation fakeRole 50 |> ignore // Change th number
                     let stream = clientMap.[fakeRole]
                     // DESERIALIZER BIEN LA
                     let decode = new System.Text.UTF8Encoding()
@@ -336,7 +336,7 @@ type AgentReceiver(ipAddress,port, roles: string list) =
                 |ReceiveMessage (message,role,channel) ->
                     printing "Check ClientMap :" clientMap
                     if not(clientMap.ContainsKey(role)) then
-                        waitForCancellation role 30 |> ignore // Change the number
+                        waitForCancellation role 50 |> ignore // Change the number
                     let stream = clientMap.[role]
                     // DESERIALIZER BIEN LA
                     let decode = new System.Text.UTF8Encoding()
