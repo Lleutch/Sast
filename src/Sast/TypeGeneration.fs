@@ -276,7 +276,7 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
                                                 let assertionString = event.Assertion
 
                                                 let fooName,argsName = 
-                                                    if assertionString <> "" then
+                                                    if ((assertionString <> "fun expression -> expression") && (assertionString <> ""))  then
                                                         let index = RefinementTypes.dictFunInfos.Count                                                            
                                                         let assertion = RefinementTypes.createFnRule index assertionString
                                                         assertion |> fst |> RefinementTypes.addToDict
@@ -332,7 +332,7 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
                                                     let assertionString = event.Assertion
 
                                                     let fooName,argsName = 
-                                                        if assertionString <> "" then
+                                                        if ((assertionString <> "fun expression -> expression") && (assertionString <> ""))  then
                                                             let index = RefinementTypes.dictFunInfos.Count                                                            
                                                             let assertion = RefinementTypes.createFnRule index assertionString
                                                             assertion |> fst |> RefinementTypes.addToDict
@@ -641,7 +641,7 @@ let invokeCodeOnSend (args:Expr list) (payload: ScribbleProtocole.Payload [])  (
     let assertionString = event.Assertion
 
     let fooName,argsName = 
-        if assertionString <> "" then
+        if ((assertionString <> "fun expression -> expression") && (assertionString <> ""))  then
             let index = RefinementTypes.dictFunInfos.Count                                                            
             let assertion = RefinementTypes.createFnRule index assertionString
             assertion |> fst |> RefinementTypes.addToDict
@@ -704,7 +704,7 @@ let invokeCodeOnReceive (args:Expr list) (payload: ScribbleProtocole.Payload [])
     let listPayload = (payloadsToList payload)
 
     let fooName,argsName = 
-        if assertionString <> "" then
+        if ((assertionString <> "fun expression -> expression") && (assertionString <> ""))  then
             let index = RefinementTypes.dictFunInfos.Count                                                            
             let assertion = RefinementTypes.createFnRule index assertionString
             assertion |> fst |> RefinementTypes.addToDict
@@ -815,7 +815,7 @@ let generateMethod aType (methodName:string) listParam nextType (errorMessage:st
                             let assertionString = event.Assertion
 
                             let fooName,argsName = 
-                                if assertionString <> "" then
+                                if ((assertionString <> "fun expression -> expression") && (assertionString <> ""))  then
                                     let index = RefinementTypes.dictFunInfos.Count                                                            
                                     let assertion = RefinementTypes.createFnRule index assertionString
                                     assertion |> fst |> RefinementTypes.addToDict
