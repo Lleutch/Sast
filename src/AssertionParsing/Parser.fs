@@ -25,8 +25,8 @@ type Op =
                 | NotEq -> "<>"
                 | LTEq -> "<="
                 | GTEq -> ">="  
-                | AndOp -> "&&"
-                | OrOp -> "||"
+                | AndOp -> " and "
+                | OrOp -> " or "
 
 type identifier = string 
          

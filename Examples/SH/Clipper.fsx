@@ -31,51 +31,32 @@ type SH =
 let numIter = 3
 let S = SH.S.instance
 
-let ifInteresect x y = x + y
-let getInteresectionP x y = x + y 
+let ifInteresect (x:int) (y:int) = x + y
+let getInteresectionP x y = (x - y)
 
-let rec calcClipPoints (vert: int list)  (c:SH.State25) =
-    let res1 = new DomainModel.Buf<int>()    
-    let res2 = new DomainModel.Buf<int>()
+
+let rec calculate (c:SH.State22) =
+    let resx = new DomainModel.Buf<int>()    
+    let resy = new DomainModel.Buf<int>()
     match c.branch() with 
-    | :? SH.close as close -> close.receive(S).finish()            
+    | :? SH.close as close -> close.receive(S).finish()     
     | :? SH.vertex as vertex -> 
-        let c1 = vertex.receive(S, res1).receivevertex(S, res2)
-        let v = ifInteresect(res1.getValue(), res2.getValue())
-        match v with 
-        | 1 | 0  -> c1.sendBothInOrOut(S, v)
-        | _ -> let p = getInteresectionP(res1.getValue(), res2.getValue())
-               c1.sendItersection(p) 
-    
+        let c1 = vertex.receive(S, resx, resy)
+        let v = ifInteresect (resx.getValue()) (resy.getValue())
+        c1.sendBothInOrOut(S, v)
+        let c2 = match v with 
+                | 1 | 0  -> c1.sendBothInOrOut(S, v)
+                | _ -> let p = getInteresectionP (resx.getValue()) (resy.getValue())
+                       c1.sendItersection(S, p)
+        calculate c2
+               
 
 let polygon = []
-let res = new DomainModel.Buf<int>()    
+let res1 = new DomainModel.Buf<int>()    
+let res2 = new DomainModel.Buf<int>()  
+let res3 = new DomainModel.Buf<int>()  
+let res4 = new DomainModel.Buf<int>()  
+
 let sh = new SH()
-let c = sh.Start().receiveplane(S, res)
+let c = sh.Start().receiveplane(S, res1, res2, res3, res4) |> calculate 
 
-
-
-
-//first |> fibrec 1 1 numIter
-
-(*let rec fibrec a b iter (c0:Fib.State7) =
-    let res = new DomainModel.Buf<int>()
-    printfn"number of iter: %d" (numIter - iter)
-    let c = c0.sendHELLO(S, a)
-
-
-    
-    match iter with
-        |0 -> c.sendBYE(S).receiveBYE(S).finish()
-        |n -> let c1 = c.sendADD(S, a)
-              let c2 = c1.receiveRES(S, res)
-              printfn "Fibo : %d" (res.getValue())
-              Async.RunSynchronously(Async.Sleep(1000))
-              fibrec b (res.getValue()) (n-1) c2
-*)
-
-
-//let check func dict = 
-
-
-    

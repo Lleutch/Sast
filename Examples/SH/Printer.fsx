@@ -11,6 +11,7 @@ let delims = """ [ {"label" : "vertex", "delims": {"delim1": [":"] , "delim2": [
                    {"label" : "none", "delims": {"delim1": [":"] , "delim2": [","] , "delim3": [";"] } }, 
                    {"label" : "close", "delims": {"delim1": [":"] , "delim2": [","] , "delim3": [";"] } }, 
                    {"label" : "plane", "delims": {"delim1": [":"] , "delim2": [","] , "delim3": [";"] } }, 
+                   {"label" : "forwardP", "delims": {"delim1": [":"] , "delim2": [","] , "delim3": [";"] } }, 
                    {"label" : "Itersection", "delims": {"delim1": [":"] , "delim2": [","] , "delim3": [";"] } }]"""
 
 
@@ -31,62 +32,20 @@ type SH =
 let numIter = 3
 let P = SH.P.instance
 let S = SH.S.instance
-(*
-let rec fibrec a b iter (c:Fib.State13) = 
-            let res = new DomainModel.Buf<int>()
-            printfn "number of iter: %d" (numIter - iter)
-            //let c = c0.sendHELLO(S, a)
-            match iter with
-                |0 -> 
-                    let c1 = c.sendBYE(S)
-                    let c2 = c1.receiveBYE(S)
-                    c2.finish()
-                |n -> 
-                    let c1 = c.sendADD(S, a)
-                    let c2 = c1.receiveRES(S, res)
 
-                    printfn "Fibo : %d" (res.getValue())
-                    Async.RunSynchronously(Async.Sleep(1000))
-
-                    fibrec b (res.getValue()) (n-1) c2
-*)
-
-let rec printPoints (c:SH.State30) =
+let rec printPoints (c:SH.State26) =
     let res = new DomainModel.Buf<int>()    
     match c.branch() with 
     | :? SH.addP as point -> 
         let c1 = point.receive(S, res)
+        printf "POint received: %i" (res.getValue()) 
         printPoints c1  
     | :? SH.none as none->  
-        printPoints none.receive(S)
-    | :? SH.close as close ->  
+        printPoints (none.receive(S))
+    | :? SH.close as close -> close.receive(S).finish() 
 
 let sh = new SH()
+
 printPoints (sh.Start())
-
-
-
-
-//first |> fibrec 1 1 numIter
-
-(*let rec fibrec a b iter (c0:Fib.State7) =
-    let res = new DomainModel.Buf<int>()
-    printfn"number of iter: %d" (numIter - iter)
-    let c = c0.sendHELLO(S, a)
-
-
-    
-    match iter with
-        |0 -> c.sendBYE(S).receiveBYE(S).finish()
-        |n -> let c1 = c.sendADD(S, a)
-              let c2 = c1.receiveRES(S, res)
-              printfn "Fibo : %d" (res.getValue())
-              Async.RunSynchronously(Async.Sleep(1000))
-              fibrec b (res.getValue()) (n-1) c2
-*)
-
-
-//let check func dict = 
-
 
     
