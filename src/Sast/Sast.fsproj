@@ -1891,6 +1891,7 @@
     <Compile Include="Runtime.fs" />
     <Compile Include="CommunicationAgents.fs" />
     <Compile Include="Regarder.fs" />
+    <Compile Include="RefinementTypes.fs" />
     <Compile Include="IO.fs" />
     <Compile Include="AsstScribbleParser.fs" />
     <Compile Include="TypeGeneration.fs" />

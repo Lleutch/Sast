@@ -12,6 +12,7 @@ open FSharp.Quotations.Evaluator
 open ScribbleGenerativeTypeProvider.DomainModel
 open ScribbleGenerativeTypeProvider.CommunicationAgents
 open ScribbleGenerativeTypeProvider.IO
+open ScribbleGenerativeTypeProvider.RefinementTypes
 
 (******************* TYPE PROVIDER'S HELPERS *******************)
 
@@ -171,9 +172,9 @@ let internal createProvidedParameters (event : ScribbleProtocole.Root) =
             yield ProvidedParameter((param.VarName),genType) 
     ]
 
-let internal toList (array:_ []) =
+(*let internal toList (array:_ []) =
     [for elem in array do
-        yield elem ]
+        yield elem ]*)
 
 let internal payloadsToList (payloads: System.Collections.Generic.IEnumerable<ScribbleProtocole.Payload>) =
     [for elem in payloads do
@@ -266,9 +267,25 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
                                            InvokeCode = 
                                             fun args-> 
                                                 let buffers = args.Tail.Tail
-                                                let listPayload = (payloadsToList event.Payload)
+                                                (*let listPayload = (payloadsToList event.Payload)
                                                 let exprDes = deserializeChoice buffers listPayload
-                                                Expr.Sequential(exprDes,exprState)//                                             
+                                                Expr.Sequential(exprDes,exprState)//*)                                             
+
+                                                let listPayload = (payloadsToListStr event.Payload)
+
+                                                let assertionString = event.Assertion
+
+                                                let fooName,argsName = 
+                                                    if assertionString <> "" then
+                                                        let index = RefinementTypes.dictFunInfos.Count                                                            
+                                                        let assertion = RefinementTypes.createFnRule index assertionString
+                                                        assertion |> fst |> RefinementTypes.addToDict
+                                                        snd assertion 
+                                                    else 
+                                                        "",[]
+
+                                                let exprDes = deserializeChoice buffers listPayload argsName fooName
+                                                Expr.Sequential(exprDes,exprState)
                                           )
                         let doc = getAssertionDoc event.Assertion
                         if doc <> "" then  myMethod.AddXmlDoc(doc)                                                                                                                                        
@@ -309,8 +326,21 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
                                             InvokeCode = 
                                                 fun args-> 
                                                     let buffers = args.Tail.Tail
-                                                    let listPayload = (payloadsToList event.Payload)
-                                                    let exprDes = deserializeChoice buffers listPayload
+
+                                                    let listPayload = (payloadsToListStr event.Payload)
+
+                                                    let assertionString = event.Assertion
+
+                                                    let fooName,argsName = 
+                                                        if assertionString <> "" then
+                                                            let index = RefinementTypes.dictFunInfos.Count                                                            
+                                                            let assertion = RefinementTypes.createFnRule index assertionString
+                                                            assertion |> fst |> RefinementTypes.addToDict
+                                                            snd assertion 
+                                                        else 
+                                                            "",[]
+
+                                                    let exprDes = deserializeChoice buffers listPayload argsName fooName
                                                     Expr.Sequential(exprDes,exprState)
                                           )
                         let doc = getAssertionDoc event.Assertion
@@ -342,6 +372,245 @@ let internal makeStateTypeBase (n:int) (s:string) =
 let internal makeStateType (n:int) = makeStateTypeBase n "State"
 
 
+(*
+let rec goingThrough (methodNaming:string) (providedList:ProvidedTypeDefinition list) (aType:ProvidedTypeDefinition) (indexList:int list) 
+                     (mLabel:Map<string,ProvidedTypeDefinition>) (mRole:Map<string,ProvidedTypeDefinition>) (fsmInstance:ScribbleProtocole.Root []) =
+        match indexList with
+        |[] -> // Last state: no next state possible
+                aType |> addMethod (<@@ printfn "finish" @@> |> createMethodType methodNaming [] typeof<End> ) |> ignore
+        |[b] -> let nextType = findProvidedType providedList fsmInstance.[b].NextState
+
+                let methodName = fsmInstance.[b].Type
+                let c = nextType.GetConstructors().[0]
+                let exprState = Expr.NewObject(c, [])
+                let event = fsmInstance.[b]
+                let fullName = event.Label
+                let labelDelim, payloadDelim, endDelim = getDelims fullName
+                printfn "ALLEZZZZZ1111111"
+                let decode = new System.Text.UTF8Encoding()
+                let message = Array.append (decode.GetBytes(fullName)) (decode.GetBytes(labelDelim.Head))
+                let role = event.Partner
+                let listTypes = 
+                    match methodName with
+                        |"send" -> toProvidedList event.Payload
+                        |"receive" -> createProvidedParameters event
+                        | _ -> []
+                let listParam = 
+                    match methodName with
+                        |"send" | "receive" -> List.append [ProvidedParameter("Role",mRole.[role])] listTypes
+                        | _  -> []
+                let nameLabel = fullName.Replace("(","").Replace(")","") 
+                match methodName with
+                    |"send" -> let myMethod = 
+                                ProvidedMethod(methodName+nameLabel,listParam,nextType,
+                                                IsStaticMethod = false,
+                                                InvokeCode = 
+                                                    fun args -> 
+                                                        let buffers = args.Tail.Tail
+
+                                                        let assertionString = event.Assertion
+
+                                                        let fooName,argsName = 
+                                                            if assertionString <> "" then
+                                                                let index = RefinementTypes.dictFunInfos.Count                                                            
+                                                                let assertion = RefinementTypes.createFnRule index assertionString
+                                                                assertion |> fst |> RefinementTypes.addToDict
+                                                                snd assertion 
+                                                            else 
+                                                                "",[]
+
+                                                        let exprAction = 
+                                                            <@@ 
+                                                                let buf = %(serialize fullName buffers (toList event.Payload) (payloadDelim.Head) (endDelim.Head) (labelDelim.Head) argsName fooName)
+                                                                Regarder.sendMessage "agent" (buf:byte[]) role 
+                                                            @@>
+                                                        let fn eq =
+                                                            <@
+                                                                if eq then
+                                                                    failwith (sprintf "METHOD USED : Send + Label = %A" nameLabel)
+                                                                else
+                                                                    printing "METHOD USED : Send + Label = " nameLabel 
+                                                            @>
+                                                        let exprAction = 
+                                                            Expr.Sequential(<@@ %(fn false) @@>,exprAction)
+                                                        Expr.Sequential(exprAction,exprState) )
+                                               
+                                              
+                               aType 
+                                    |> addMethod myMethod
+                                    |> ignore
+                    |"receive" ->  let myMethod = 
+                                    ProvidedMethod( methodName+nameLabel,listParam,nextType,
+                                                    IsStaticMethod = false,
+                                                    InvokeCode = 
+                                                        fun args-> 
+                                                            let buffers = args.Tail.Tail
+                                                            let listPayload = (toList event.Payload)
+
+                                                            let assertionString = event.Assertion
+                                                            
+                                                            let fooName,argsName = 
+                                                                if assertionString <> "" then
+                                                                    let index = RefinementTypes.dictFunInfos.Count                                                            
+                                                                    let assertion = RefinementTypes.createFnRule index assertionString
+                                                                    assertion |> fst |> RefinementTypes.addToDict
+                                                                    snd assertion 
+                                                                else 
+                                                                    "",[]
+                                                                    
+
+                                                            let exprDes = deserialize buffers listPayload [message] role argsName fooName
+                                                            let exprDes = 
+                                                                Expr.Sequential(<@@ printing "METHOD USED : Receive + Label = " nameLabel @@>,exprDes)
+                                                            Expr.Sequential(exprDes,exprState) 
+                                                   )
+                                   let myMethodAsync =  
+                                    ProvidedMethod( (methodName+nameLabel+"Async"),listParam,nextType,
+                                                    IsStaticMethod = false,
+                                                    InvokeCode = 
+                                                        fun args-> 
+                                                            let buffers = args.Tail.Tail
+                                                            let listPayload = (toList event.Payload)
+
+                                                            let assertionString = event.Assertion
+
+                                                            let fooName,argsName = 
+                                                                if assertionString <> "" then
+                                                                    let index = RefinementTypes.dictFunInfos.Count                                                            
+                                                                    let assertion = RefinementTypes.createFnRule index assertionString
+                                                                    assertion |> fst |> RefinementTypes.addToDict
+                                                                    snd assertion 
+                                                                else 
+                                                                    "",[]
+
+
+                                                            let exprDes = deserializeAsync buffers listPayload [message] role argsName fooName
+                                                            Expr.Sequential(exprDes,exprState) 
+                                                  )
+                                   aType 
+                                    |> addMethod myMethod
+                                    |> addMethod myMethodAsync
+                                    |> ignore                 
+                
+                    | _ -> failwith " Mistake from the CFSM : Type of the message is neither send nor receive !!!!!!" 
+
+        |hd::tl -> let nextType = findProvidedType providedList fsmInstance.[hd].NextState
+                   
+                   let methodName = fsmInstance.[hd].Type
+                   let c = nextType.GetConstructors().[0]
+                   let exprState = Expr.NewObject(c, [])
+                   let event = fsmInstance.[hd]
+                   let fullName = event.Label
+                   let labelDelim, payloadDelim, endDelim = getDelims fullName
+                   printfn "ALLLEZZZZ 2222222"
+                   let decode = new System.Text.UTF8Encoding()
+                   let message = Array.append (decode.GetBytes(fullName)) (decode.GetBytes(labelDelim.Head))
+                   let role = event.Partner
+                   let listTypes = 
+                    match methodName with
+                        |"send" -> toProvidedList event.Payload
+                        |"receive" -> createProvidedParameters event
+                        | _ -> []
+                   let listParam = 
+                    match methodName with
+                        |"send" | "receive" -> List.append [ProvidedParameter("Role",mRole.[role])] listTypes
+                        | _  -> []
+                   
+                   let nameLabel = fullName.Replace("(","").Replace(")","")     
+                   match methodName with
+                    |"send" -> 
+                        let myMethod = 
+                            ProvidedMethod( methodName+nameLabel,listParam,nextType,
+                                            IsStaticMethod = false,
+                                            InvokeCode = 
+                                                fun args-> 
+                                                    let buffers = args.Tail.Tail
+
+                                                    let assertionString = event.Assertion
+
+                                                    let fooName,argsName = 
+                                                        if assertionString <> "" then
+                                                            let index = RefinementTypes.dictFunInfos.Count                                                            
+                                                            let assertion = RefinementTypes.createFnRule index assertionString
+                                                            assertion |> fst |> RefinementTypes.addToDict
+                                                            snd assertion 
+                                                        else 
+                                                            "",[]
+
+
+                                                    let exprAction = 
+                                                        <@@ 
+                                                            let buf = %(serialize fullName buffers (toList event.Payload) (payloadDelim.Head) (endDelim.Head) (labelDelim.Head) argsName fooName)
+                                                            Regarder.sendMessage "agent" (buf:byte[]) role 
+                                                        @@>
+                                                    let fn eq =
+                                                        <@
+                                                            if eq then
+                                                                failwith (sprintf "METHOD USED : Send + Label = %A" nameLabel )
+                                                            else
+                                                                printing "METHOD USED : Send + Label = " nameLabel 
+                                                        @>
+                                                    let exprAction = 
+                                                        Expr.Sequential(<@@ %(fn false) @@>,exprAction)
+                                                    Expr.Sequential(exprAction,exprState) 
+                                               )
+                        aType 
+                            |> addMethod myMethod
+                            |> ignore
+                    |"receive" ->  let myMethod = 
+                                    ProvidedMethod( methodName+nameLabel,listParam,nextType,
+                                                    IsStaticMethod = false,
+                                                    InvokeCode = 
+                                                        fun args-> 
+                                                            let buffers = args.Tail.Tail
+                                                            let listPayload = (toList event.Payload)
+
+                                                            let assertionString = event.Assertion
+                                                            let fooName,argsName = 
+                                                                if assertionString <> "" then
+                                                                    let index = RefinementTypes.dictFunInfos.Count                                                            
+                                                                    let assertion = RefinementTypes.createFnRule index assertionString
+                                                                    assertion |> fst |> RefinementTypes.addToDict
+                                                                    snd assertion 
+                                                                else 
+                                                                    "",[]
+                                                            
+                                                            let exprDes = deserialize buffers listPayload [message] role argsName fooName
+                                                            let exprDes = 
+                                                                Expr.Sequential(<@@ printing "METHOD USED : Receive + Label = " nameLabel @@>,exprDes)
+                                                            Expr.Sequential(exprDes,exprState) 
+                                                   )
+                                   
+                                   let myMethodAsync = 
+                                    ProvidedMethod( (methodName+nameLabel+"Async"),listParam,nextType,
+                                                    IsStaticMethod = false,
+                                                    InvokeCode = 
+                                                        fun args -> 
+                                                            let buffers = args.Tail.Tail
+                                                            let listPayload = (toList event.Payload)
+
+                                                            let assertionString = event.Assertion
+                                                            let fooName,argsName = 
+                                                                if assertionString <> "" then
+                                                                    let index = RefinementTypes.dictFunInfos.Count                                                            
+                                                                    let assertion = RefinementTypes.createFnRule index assertionString
+                                                                    assertion |> fst |> RefinementTypes.addToDict
+                                                                    snd assertion 
+                                                                else 
+                                                                    "",[]
+
+                                                            let exprDes = deserializeAsync buffers listPayload [message] role argsName fooName
+                                                            Expr.Sequential(exprDes,exprState) 
+                                                  )
+                                   aType 
+                                    |> addMethod myMethod
+                                    |> addMethod myMethodAsync
+                                    |> ignore                 
+                
+                    | _ -> failwith (sprintf " Mistake you have a method named : %s  %d  %d !!!!!!" methodName  (fsmInstance.[hd].NextState) (fsmInstance.[hd].CurrentState) )                    
+                   goingThrough methodName providedList aType tl mLabel mRole fsmInstance 
+
+*)
 let internal getAllChoiceLabels (indexList : int list) (fsmInstance:ScribbleProtocole.Root []) =
         let rec aux list acc =
             match list with
@@ -364,14 +633,25 @@ let internal getAllChoiceLabelString (indexList : int list) (fsmInstance:Scribbl
     in aux indexList []
 
 let invokeCodeOnSend (args:Expr list) (payload: ScribbleProtocole.Payload [])  (payloadDelim: string List) 
-                    (labelDelim : string List)  (endDelim: string List)  (nameLabel:string) exprState role fullName = 
+                    (labelDelim : string List)  (endDelim: string List)  (nameLabel:string) exprState role fullName (event:ScribbleProtocole.Root) = 
     let buffers = args.Tail.Tail         
                                                     
     let payloadNames = (payloadsToListStr payload )
     let types = payloadsToList payload
+    let assertionString = event.Assertion
+
+    let fooName,argsName = 
+        if assertionString <> "" then
+            let index = RefinementTypes.dictFunInfos.Count                                                            
+            let assertion = RefinementTypes.createFnRule index assertionString
+            assertion |> fst |> RefinementTypes.addToDict
+            snd assertion 
+        else 
+            "",[]
+
     //let buf = ser buffers
     let exprAction = 
-        <@@ let buf = %(serialize fullName buffers types (payloadDelim.Head) (endDelim.Head) (labelDelim.Head) ) 
+        <@@ let buf = %(serialize fullName buffers payloadNames (payloadDelim.Head) (endDelim.Head) (labelDelim.Head) argsName fooName)
             Regarder.sendMessage "agent" (buf:byte[]) role @@>
 
     let fn eq =
@@ -418,12 +698,21 @@ let invokeCodeOnAccept role exprState=
 
 let invokeCodeOnReceive (args:Expr list) (payload: ScribbleProtocole.Payload [])  (payloadDelim: string List) 
                        (labelDelim : string List)  (endDelim: string List)  (nameLabel:string) (message: byte[]) 
-                        exprState role fullName = 
+                        exprState role fullName assertionString = 
    
     let buffers = args.Tail.Tail
     let listPayload = (payloadsToList payload)
 
-    let exprDes = deserialize buffers listPayload [message] role
+    let fooName,argsName = 
+        if assertionString <> "" then
+            let index = RefinementTypes.dictFunInfos.Count                                                            
+            let assertion = RefinementTypes.createFnRule index assertionString
+            assertion |> fst |> RefinementTypes.addToDict
+            snd assertion 
+        else 
+            "",[]
+    let exprDes = deserialize buffers listPayload [message] role argsName fooName
+   
     let exprDes = 
         Expr.Sequential(<@@ printing "METHOD USED : Receive + Label = " nameLabel @@>,exprDes)
                                                             
@@ -494,7 +783,7 @@ let generateMethod aType (methodName:string) listParam nextType (errorMessage:st
                         fun args-> 
                             invokeCodeOnSend args event.Payload payloadDelim 
                                 labelDelim endDelim nameLabel 
-                                exprState role fullName)
+                                exprState role fullName event)
                         
             let doc = getAssertionDoc event.Assertion
             if doc <> "" then myMethod.AddXmlDoc(doc)
@@ -514,7 +803,7 @@ let generateMethod aType (methodName:string) listParam nextType (errorMessage:st
                         fun args-> 
                             invokeCodeOnReceive args event.Payload payloadDelim 
                                 labelDelim endDelim nameLabel message 
-                                exprState role fullName)
+                                exprState role fullName event.Assertion)
                                    
             let myMethodAsync = 
                 ProvidedMethod((methodName+nameLabel+"Async"),listParam,nextType,
@@ -523,9 +812,20 @@ let generateMethod aType (methodName:string) listParam nextType (errorMessage:st
                         fun args -> 
                             let buffers = args.Tail.Tail
                             let listPayload = (payloadsToList event.Payload)
-                            let exprDes = deserializeAsync buffers listPayload [message] role
+                            let assertionString = event.Assertion
+
+                            let fooName,argsName = 
+                                if assertionString <> "" then
+                                    let index = RefinementTypes.dictFunInfos.Count                                                            
+                                    let assertion = RefinementTypes.createFnRule index assertionString
+                                    assertion |> fst |> RefinementTypes.addToDict
+                                    snd assertion 
+                                else 
+                                    "",[]
+
+                            let exprDes = deserializeAsync buffers listPayload [message] role argsName fooName
                             Expr.Sequential(exprDes,exprState))
-           
+                            
             let doc = getAssertionDoc event.Assertion
             if doc <> "" then myMethod.AddXmlDoc(doc); myMethodAsync.AddXmlDoc(doc)
                         
