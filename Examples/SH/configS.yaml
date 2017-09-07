@@ -3,10 +3,14 @@ Partners:
       IP: 127.0.0.1
       Port: 5006
 
+    - Name: P
+      IP: 127.0.0.1
+      Port: 5004
+
 LocalRole:
   Name: S
   IP: 127.0.0.1
   Port: 5005
 
 ScribblePath:
-  FileName: "C:/PathToScribble/scribblec.bat"
+  FileName: "C:/PathToScribble/scribblecass.bat"

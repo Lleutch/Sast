@@ -6,7 +6,9 @@ Partners:
 LocalRole:
   Name: C
   IP: 127.0.0.1
-  Port: 5004
+  Port: 5006
 
 ScribblePath:
   FileName: "C:/PathToScribble/scribblecass.bat"
+
+

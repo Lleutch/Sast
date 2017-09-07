@@ -45,6 +45,11 @@ let serLabel (label:string) (delim:string) =
     let delimBytes = delim |> toBytes
     delimBytes |> Array.append labelBytes
 
+
+let getIntValues (args: Expr list) = 
+    args |> List.map (fun arg -> Expr.Coerce(arg,typeof<int>) |> unbox<int []>)
+    
+
 let serPayloads (args:Expr list) (listTypes:string list) (payloadDelim:string) (endDelim:string) (argsNames:string list) foo =
     let listPayloads =  
         args 
@@ -132,7 +137,9 @@ let serPayloads (args:Expr list) (listTypes:string list) (payloadDelim:string) (
        ) <@ [||] @> <| listDelims
 
 
+
 let serialize (label:string) (args:Expr list) (listTypes:string list) (payloadDelim:string) (endDelim:string) (labelDelim:string) argsNames foo =
+
     let labelSerialized = <@ serLabel label labelDelim @> // 
                              
 //    let payloadSerialized = serPayloads args listTypes payloadDelim endDelim 

@@ -22,6 +22,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Project", "Project", "{3D79
 		README.md = README.md
 	EndProjectSection
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "AssertionParsing", "src\AssertionParsing\AssertionParsing.fsproj", "{314A3E8A-2A3B-4122-886B-8D77E09ACB73}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -32,6 +34,10 @@ Global
 		{5CBC28B4-3227-40AB-9D03-D5F185097991}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{5CBC28B4-3227-40AB-9D03-D5F185097991}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{5CBC28B4-3227-40AB-9D03-D5F185097991}.Release|Any CPU.Build.0 = Release|Any CPU
+		{314A3E8A-2A3B-4122-886B-8D77E09ACB73}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{314A3E8A-2A3B-4122-886B-8D77E09ACB73}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{314A3E8A-2A3B-4122-886B-8D77E09ACB73}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{314A3E8A-2A3B-4122-886B-8D77E09ACB73}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

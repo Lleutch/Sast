@@ -10,8 +10,35 @@ open System
 // ScribbleProvider specific namespaces and modules
 open ScribbleGenerativeTypeProvider.DomainModel
 open System.Collections.Generic
+open Microsoft.FSharp.Quotations
+open System.Runtime.Serialization
+open System.Runtime.Serialization.Formatters.Binary
+
+let isDummyVar (x:string) = x.StartsWith("_")
+
+type VarCache() =
+    let data = Dictionary<string,_>()
+    member x.RuntimeOperation() = data.Count  
+      
+    member x.Add(k:string, v:int) = 
+      if not (isDummyVar k) then 
+        match data.ContainsKey(k) with 
+        | true -> data.Item(k) <- v
+        | _ -> data.Add(k, v) 
+    
+    member x.Get(k:string) = 
+        match data.TryGetValue(k) with 
+        | true, value -> value
+        | _ -> failwith (sprintf "Cannot retrieve value from cache: %s" k)
+
+    member x.Print() = 
+        printf "Cache: "
+        [for key in data.Keys do 
+            printf "%s -- %A " key (data.Item(key))
+        ]
 
 
+let createCache = new VarCache()
 
 let printing message data =
     let doPrinting = true
@@ -19,6 +46,17 @@ let printing message data =
         printfn "%s %A" message data
 
 exception TooManyTriesError of string
+
+let serializeBinary<'a> (x :'a) =
+    let binFormatter = new BinaryFormatter()
+    use stream = new MemoryStream()
+    binFormatter.Serialize(stream, x)
+    stream.ToArray()
+
+let deserializeBinary<'a> (arr : byte[])=
+    let binFormatter = new BinaryFormatter()
+    use stream = new MemoryStream(arr)
+    binFormatter.Deserialize(stream) :?> 'a
 
 let internal moreLists (labels:byte[] list) =
     let rec aux acc (list1 : byte[] list) =
@@ -110,17 +148,23 @@ let readPay (s:Stream) (label:string) types =
                 aux accList (Array.append accArray [|tmp|]) (hd::tl)
     in aux [] [||] types
 
+type IRouter = 
+    abstract member UpdateAgentSenders : string -> TcpClient -> unit
+    abstract member UpdateAgentReceiver : string -> TcpClient -> unit
 
-type AgentSender(ipAddress,port) =
+type AgentSender(ipAddress,port, localRole:string, role:string) =
+    let mutable localRole = localRole
+    let mutable role = role
+    [<DefaultValue>] val mutable router : IRouter
 
     let waitSynchronously timeout =
-        async{
+        async {
             do! Async.Sleep(timeout*1000)
         } 
     
     // FEATURE to add: 5 Tries of 3 seconds and then double the time at each try following Microsoft Standards.
     // FEATURE ADDED
-    let connect address p (tcpClient:TcpClient) =
+    let connect address p (tcpClient:TcpClient) (router:IRouter) =
         System.Console.WriteLine("Connecting ...")
         let rec aux timeout count =
             let tries = 5
@@ -131,8 +175,9 @@ type AgentSender(ipAddress,port) =
                                         //MOCK THE CONNECTION HERE
                                         System.Console.WriteLine("Trying to connect to : IP = {0}  and Port = {1} ...", IPAddress.Parse(address), p)
                                         tcpClient.Connect(IPAddress.Parse(address),p)
-                                        System.Console.WriteLine("Apres essai ...")
+                                        System.Console.WriteLine("After connect attempt...")
                                         if (tcpClient.Connected) then
+                                            router.UpdateAgentReceiver role  tcpClient
                                             System.Console.WriteLine("Connected to: IP = {0}  and Port = {1} ...", IPAddress.Parse(address), p)                                            
                     |_ -> tcpClient.Connect(IPAddress.Parse(address),p)
                           if not(tcpClient.Connected) then
@@ -174,41 +219,83 @@ type AgentSender(ipAddress,port) =
             |Some sending -> 
                 printing "Send Message : post to actor loop" ""
                 sending.Post(Message.SendMessage message)
+    
+    // this.Start should be called when we have request!
+    member this.SetRouter router = 
+        this.router <- router
+        
 
     member this.Start() = // Raise an exception due to trying to connect and parsing the IPAddress
+        printing "Is start" this.router
         let tcpClientSend = new TcpClient()
-        connect ipAddress port tcpClientSend
-        let stream = tcpClientSend.GetStream()    
+        connect ipAddress port tcpClientSend this.router
+        let stream = tcpClientSend.GetStream()
+        let serializedRole = localRole + ";"
+        printing "serialized roles is" serializedRole
+        let msg =  Encoding.ASCII.GetBytes(serializedRole)
+        printing "serialized roles binary is" (Array.toList msg)
+        stream.Write(msg, 0, msg.Length)
         agentSender <- Some (Agent.Start(send stream))
 
-
-
-type AgentReceiver(ipAddress,port) =
+    member this.Accept(tcpClient:TcpClient) = // Raise an exception due to trying to connect and parsing the IPAddress
+        let stream = tcpClient.GetStream()
+        agentSender <- Some (Agent.Start(send stream))
+    
+type AgentReceiver(ipAddress,port, roles: string list) =
 
     let server = new TcpListener(IPAddress.Parse(ipAddress),port)
     let mutable clientMap = Map.empty
+    let mutable roles = roles
+    [<DefaultValue>] val mutable parentRouter : IRouter
  
     let rec waitForCancellation str count =
         match count with
             |n when n=0 -> ()
             |n when n>0 -> if not(clientMap.ContainsKey str) then
                                 System.Console.WriteLine(" I AM WAITING FOR CANCELLATION !!!!")
-                                Async.RunSynchronously(Async.Sleep 100)
+                                System.Console.WriteLine(clientMap.Count)
+                                System.Console.WriteLine(" For role" + str)
+                                Async.RunSynchronously(Async.Sleep 1000)
                                 waitForCancellation str (count-1)
                            else
                                 ()
             |_ -> ()
         
  
-    let binding (tcpListenerReceive:TcpListener) (actor:Agent<Message>) =
+    let binding (tcpListenerReceive:TcpListener) (router:IRouter) (actor:Agent<Message>) =
         let rec loop () = async {
             let client = tcpListenerReceive.AcceptTcpClient()
             let stream = client.GetStream()
+            let endpointClient = client.Client.RemoteEndPoint.ToString()
+            printing "Add a stream for role" (roles.Length)
             // CHANGE BELOW BY READING THE ROLE IN ANOTHER Map<role:string,(IP,PORT)>
-            let readRole = "hey"//readAllBytes stream
+            // Note that here we do not actually know which roles are connected. We do the actual binding when we receive the first message, 
+            // that is role for which role
+            
+            let dis = new BinaryReader(stream)
+            let decode = new UTF8Encoding()
+            let mutable value = ""
+            let sb = new StringBuilder()
+            
+            while not stream.DataAvailable do 
+                printing "waiting for data" value
+            
+            let res = while stream.DataAvailable && value<>";" do 
+                        let tmp = dis.ReadByte()
+                        value <- decode.GetString([|tmp|])
+                        printing "receiveing" value
+                        if value<>";" then
+                            sb.Append(value) |> ignore
+            
+            let readRole = sb.ToString()
+            //let role = deserializeBinary<string> stream res
+            printing "the role that was received is " (readRole)
+            //let readRole = roles.Head //readAllBytes stream
+            printing "Add a stream for role" (endpointClient)
             // CHANGE ABOVE BY READING THE ROLE IN ANOTHER Map<role:string,(IP,PORT)>
             clientMap <- clientMap.Add(readRole,stream)
             printing " SIZE :" (clientMap.Count,readRole)
+            router.UpdateAgentSenders readRole client 
             return! loop()
             }
         in loop()
@@ -230,7 +317,8 @@ type AgentReceiver(ipAddress,port) =
                     ()  // Raise an exception Error due to bad coding in the type provider
                     return! loop()      
                 |ReceiveMessageAsync (message,role,listTypes,channel) -> // The UnMarshalling is done outside the Agent Routing Architecture NOT HERE.
-                    let fakeRole = "hey"
+                    let fakeRole = role
+                    printing "Check ClientMap :" clientMap
                     if not(clientMap.ContainsKey(fakeRole)) then
                         waitForCancellation fakeRole 50 |> ignore // Change th number
                     let stream = clientMap.[fakeRole]
@@ -247,9 +335,9 @@ type AgentReceiver(ipAddress,port) =
                     return! loop()
                 |ReceiveMessage (message,role,channel) ->
                     printing "Check ClientMap :" clientMap
-                    if not(clientMap.ContainsKey("hey")) then
-                        waitForCancellation "hey" 50 |> ignore // Change the number
-                    let stream = clientMap.["hey"]
+                    if not(clientMap.ContainsKey(role)) then
+                        waitForCancellation role 50 |> ignore // Change the number
+                    let stream = clientMap.[role]
                     // DESERIALIZER BIEN LA
                     let decode = new System.Text.UTF8Encoding()
                     printing "Wait Read Label" stream.DataAvailable
@@ -295,11 +383,16 @@ type AgentReceiver(ipAddress,port) =
     do 
         printing "Current Address IP :" (IPAddress.Parse(ipAddress),ipAddress,port)
 
-   
+    member this.SetRouter (router:IRouter) = 
+        this.parentRouter <- router
+
     member this.Start()=
         server.Start()
-        System.Console.WriteLine("TCP LISTENER DE AGENT RECEIVER START...")
-        Agent.Start(binding server) |> ignore
+        System.Console.WriteLine("TCP LISTENER RECEIVER STARTS...")
+        //let roles = clientMap |> Map.toSeq |> Seq.map fst |> Seq.toList
+        System.Console.WriteLine(roles.Length)
+        System.Console.WriteLine(clientMap.Count)
+        Agent.Start(binding server this.parentRouter) |> ignore
         agentReceiver <- Some (Agent.Start(receive))
 
     // To Close the listener to optimize ressource usage and avoid receiving things that do not belong to the protocol.
@@ -309,8 +402,13 @@ type AgentReceiver(ipAddress,port) =
             client.Value.Close()
         server.Stop()
 
+    member thid.UpdateClientMap(role:string, client:TcpClient)= 
+        if not (clientMap.ContainsKey(role)) then
+            clientMap <- clientMap.Add(role,client.GetStream())
+
     // Be carefull with this function: IF IT'S NONE RAISE AN EXCEPTION
     member this.ReceiveMessageAsync(message) =
+        
         System.Console.WriteLine("RECEIVING...")
         match agentReceiver with
             |Some receive -> receive.Post(Message.ReceiveMessageAsync message )                            
@@ -326,87 +424,112 @@ type AgentReceiver(ipAddress,port) =
             |None -> failwith " agent not instanciated yet"
                      
 
-type AgentRouter(agentMap:Map<string,AgentSender>,agentReceiving:AgentReceiver) =
-    
-    let agentMapping = agentMap
-    let agentReceiver = agentReceiving
+type AgentRouter(explicitConnection:bool) =
+        let explicitConnection = explicitConnection
+        //let agentMapping = agentMap
+        //let connectedAgents = agentMapping |> Map.map (fun x y -> false)
+        let mutable (payloadChoice:byte[] list) = []
+        //let agentReceiver = agentReceiver
 
-    let mutable (payloadChoice:byte[] list) = []
- 
-    let sendAndReceive (agentRouter:Agent<Message>) =
-        let rec loop () = async{
-            let! msg = agentRouter.Receive()
-            match msg with
-                |SendMessage (message,role) ->
-                    printing "SendMessage : Agent Mapping = " agentMapping  
-                    let agentSender = agentMapping.[role]
-                    printing "Got the correct agent" ""
-                    agentSender.SendMessage(message,role) // Here, message is the serialized message that needs to be sent
-                    printing "Sent the message to the correct the agent that will use tcp" ""
-                    return! loop()
-                |ReceiveMessageAsync (message,role,listTypes,channel) -> 
-                    printing "Receives Message Async : send to Agent" ""
-                    agentReceiver.ReceiveMessageAsync(message,role,listTypes,channel) // Be Carefull: message is the serialized version of the Type
-                                                                                           // While replyMessage is the message really received from the network 
-                    return! loop()
-                |ReceiveMessage (message,role,channel) -> 
-                    printing "Receives Message : send to Agent" ""
-                    let message = agentReceiver.ReceiveMessage(message,role,channel) // Be Carefull: message is the serialized version of the Type
-                    printing "Receives Message : reply to channel" ""
-                    channel.Reply(message)                                                                                   // While replyMessage is the message really received from the network 
-                    printing "Receives Message : replied to channel" ""
-                    return! loop()
-            }
-        in loop()
-   
-    let agentRouter = Agent.Start(sendAndReceive)
- 
-    member this.Start() =
-        agentReceiver.Start()
-        for sender in agentMapping do
-            sender.Value.Start()
-               
-    member this.SendMessage(message) =
-        printing "SendMessage : Post to the write role = " message
-        agentRouter.Post(Message.SendMessage message)
-   
-    member this.ReceiveMessage(messageAndType) =
-        let (msg,role) = messageAndType
-        let replyMessage = agentRouter.PostAndReply(fun channel -> Message.ReceiveMessage (msg,role,channel))
-        payloadChoice <- replyMessage.Tail
-        replyMessage
-
-    member this.ReceiveMessageAsync(message) = 
-        let (msg,role,listTypes) = message
-        let replyMessage = agentRouter.PostAndAsyncReply(fun channel -> Message.ReceiveMessageAsync (msg,role,listTypes,channel))
-        replyMessage            
-
-    member this.ReceiveChoice() =
-        printing "Go through A choice!!!" ""
-        payloadChoice
+        let sendAndReceive (agentMapping:Map<string,AgentSender>) (agentReceiver: AgentReceiver)  (agentRouter:Agent<Message>)=
+            let rec loop () = async{
+                let! msg = agentRouter.Receive()
+                match msg with
+                    |SendMessage (message,role) ->
+                        printing "SendMessage : Agent Mapping = " agentMapping  
+                        let agentSender = agentMapping.[role]
+                        printing "Got the correct agent" ""
+                        
+                        agentSender.SendMessage(message,role) // Here, message is the serialized message that needs to be sent
+                        printing "Sent the message to the correct the agent that will use tcp" ""
+                        return! loop()
+                    |ReceiveMessageAsync (message, role, listTypes, channel) -> 
+                        printing "Receives Message Async : send to Agent" ""
+                        agentReceiver.ReceiveMessageAsync(message, role, listTypes, channel) // Be Carefull: message is the serialized version of the Type
+                                                                                              // While replyMessage is the message really received from the network 
+                        return! loop()
+                    |ReceiveMessage (message,role,channel) -> 
+                        printing "Receives Message : send to Agent" ""
+                        let message = agentReceiver.ReceiveMessage(message,role,channel) // Be Carefull: message is the serialized version of the Type
+                        printing "Receives Message : reply to channel" ""
+                        channel.Reply(message)                                                                                   // While replyMessage is the message really received from the network 
+                        printing "Receives Message : replied to channel" ""
+                        return! loop()
+                }
+            in loop()
         
+        
+        [<DefaultValue>] val mutable agentRouter: MailboxProcessor<Message>
+        [<DefaultValue>] val mutable agentMapping:Map<string,AgentSender>
+        [<DefaultValue>] val mutable agentReceiver: AgentReceiver
 
+        member this.StartAgentRouter(agentMapping:Map<string,AgentSender>, agentReceiver: AgentReceiver) = 
+            this.agentMapping<- agentMapping
+            this.agentReceiver <- agentReceiver
+            this.agentRouter <- Agent.Start(sendAndReceive agentMapping agentReceiver)    
 
+        member this.RequestConnection (roleName :string) = 
+            printing "In request for role" roleName
+            let role = this.agentMapping.[roleName]
+            role.Start()
 
+        member this.AcceptConnection (roleName :string) = 
+            // This is wrong. It does request and not accept
+            printing "just in waiting state to connect to role " roleName
+            ()
+
+        member this.Start() =
+            this.agentReceiver.Start()
+            if (not explicitConnection) then 
+                for sender in this.agentMapping do
+                    sender.Value.Start()
+                    //connectedAgents.[sender.Key] = true |> ignore
+
+                   
+        member this.SendMessage(message) =
+            printing "SendMessage : Post to the write role = " message
+            this.agentRouter.Post(Message.SendMessage message)
+   
+        member this.ReceiveMessage(messageAndType) =
+            let (msg,role) = messageAndType
+            let replyMessage = this.agentRouter.PostAndReply(fun channel -> Message.ReceiveMessage (msg,role,channel))
+            payloadChoice <- replyMessage.Tail
+            replyMessage
+
+        member this.ReceiveMessageAsync(message) = 
+            let (msg,role,listTypes) = message
+            let replyMessage = this.agentRouter.PostAndAsyncReply(fun channel -> Message.ReceiveMessageAsync (msg,role,listTypes,channel))
+            replyMessage            
+
+        member this.ReceiveChoice() =
+            printing "Go through A choice!!!" ""
+            payloadChoice
+
+        interface IRouter with 
+            member this.UpdateAgentSenders role  tcpClient = 
+                this.agentMapping.[role].Accept(tcpClient)
+
+            member this.UpdateAgentReceiver role tcpClient = 
+                this.agentReceiver.UpdateClientMap(role, tcpClient)
 
 // Functions that generate the agents.
 
 let isIn (list:string list) (localRole:string) =
     list |> List.exists (fun x -> x=localRole) 
 
-let private createReceiver (ipAddress:string) (port:int)=
-    new AgentReceiver(ipAddress,port)
+let private createReceiver (ipAddress:string) (port:int) (roles: string list) =
+    new AgentReceiver(ipAddress,port, roles)
 
-let createMapSender (partnersInfo: IList<ConfigFile.Partners_Item_Type>) (listRoles:string list) =
+let createMapSender (partnersInfo: IList<ConfigFile.Partners_Item_Type>) (listRoles:string list) (localRole:string) =
     let mutable mapping = Map.empty<string,AgentSender>
     for partner in partnersInfo do
         match (listRoles |> isIn <| partner.Name) with
             | false -> failwith (sprintf "The following role : %s from the config file doesnt belong to the protocol: 
                                  Check If you have spelled it correctly, be aware, the role is case-sensitive"  (partner.Name) )
-            | true -> mapping <- mapping.Add(partner.Name, new AgentSender(partner.IP,partner.Port))
+            | true -> mapping <- mapping.Add(partner.Name, new AgentSender(partner.IP,partner.Port, localRole, partner.Name))
     mapping
 
-let createRouter (configInfos:ConfigFile) (listRoles:string list) =
+let createRouter (configInfos:ConfigFile) (listRoles:string list) (explicitConnection: bool) =
     let lengthList = listRoles.Length
     let configSize = configInfos.Partners.Count + 1
     match (configSize = lengthList) with
@@ -417,8 +540,19 @@ let createRouter (configInfos:ConfigFile) (listRoles:string list) =
                             Check If you have spelled it correctly, be aware, the role is case-sensitive"  (configInfos.LocalRole.Name) )
         |true -> 
             printfn "Agents Infos :"            
-            let mapAgentSender = configInfos.Partners |> createMapSender <| listRoles
-            let agentReceiver = configInfos.LocalRole.IP |> createReceiver <| configInfos.LocalRole.Port
+            let router = new AgentRouter(explicitConnection)
+
+            let mapAgentSender = createMapSender configInfos.Partners listRoles configInfos.LocalRole.Name
+            for sender in mapAgentSender 
+                do  sender.Value.SetRouter router
+
+            let ip = configInfos.LocalRole.IP
+            let port = configInfos.LocalRole.Port
+            let partners = listRoles |> List.filter (fun x -> x<>configInfos.LocalRole.Name)        
             printfn "Infos For Agent Sender : %A" (mapAgentSender,configInfos.Partners,listRoles)
             printfn "Infos For Agent Receiver : %A" (configInfos.LocalRole.IP,configInfos.LocalRole.Port,configInfos.LocalRole.Name)
-            new AgentRouter(mapAgentSender,agentReceiver)
+            let receiver = createReceiver configInfos.LocalRole.IP configInfos.LocalRole.Port partners 
+            receiver.SetRouter router
+             
+            router.StartAgentRouter(mapAgentSender, receiver)
+            router

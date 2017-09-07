@@ -35,7 +35,8 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
         let configFilePath = parameters.[0]  :?> string
         let delimitaters = parameters.[1]  :?> string
         let typeAliasing = parameters.[2] :?> string
-
+        let explicitConnection = parameters.[4] :?> bool
+        
         let fsm = 
             let aliases = DotNetTypesMapping.Parse(typeAliasing)
             let mutable prot = fsm
@@ -80,20 +81,20 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
         DomainModel.config.Load(naming)
 
 
-        (tupleLabel |> fst) |> Regarder.ajouterLabel
-        let agentRouter = (DomainModel.config) |> createRouter <| listOfRoles 
-        Regarder.ajouter "agent" agentRouter
-
+        (tupleLabel |> fst) |> Regarder.addLabel
+        let agentRouter = createRouter (DomainModel.config)  listOfRoles explicitConnection
+        Regarder.addAgent "agent" agentRouter 
+        let cache = createCache
+        Regarder.initCache "cache" cache
 
         addProperties listTypes listTypes (Set.toList stateSet) (fst tupleLabel) (fst tupleRole) protocol
 
         let ctor = firstStateType.GetConstructors().[0]                                                               
         let ctorExpr = Expr.NewObject(ctor, [])
         let exprCtor = ctorExpr
-        let exprStart = <@@ Regarder.startAgentRouter "agent" @@>
+        let exprStart = <@@ Regarder.startAgentRouter "agent"  @@>
         let expression = Expr.Sequential(exprStart,exprCtor)
             
-
         let ty = name 
                     |> createProvidedType tmpAsm
                     |> addCstor ( <@@ "hey" + string n @@> |> createCstor [])
@@ -152,66 +153,54 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
 
         let fsm = match scribbleSource with 
                     | ScribbleSource.WebAPI ->  
-                                                let str = code.ToString()
-                                                let replace0 = System.Text.RegularExpressions.Regex.Replace(str,"(\s{2,}|\t+)"," ") 
-                                                let replace2 = System.Text.RegularExpressions.Regex.Replace(replace0,"\"","\\\"")
-                                                let str = sprintf """{"code":"%s","proto":"%s","role":"%s"}""" replace2 protocol localRole
-                                                FSharp.Data.Http.RequestString("http://localhost:8083/graph.json", 
-                                                    query = ["json",str] ,
-                                                    headers = [ FSharp.Data.HttpRequestHeaders.Accept HttpContentTypes.Json ],
-                                                    httpMethod = "GET" )
-                    |ScribbleSource.File -> let parsedScribble = code.ToString()
-                                            let str = sprintf """{"code":"%s","proto":"%s","role":"%s"}""" "code" protocol localRole
-                                            match Parsing.getFSMJson parsedScribble str with 
-                                                | Some parsed -> parsed
-                                                | None -> failwith "The file given does not contain a valid fsm"
-                    |ScribbleSource.LocalExecutable ->  let p = new Process();
-                                                        //redirect the output stream
-                                                        let scribbleScript = "cmd.exe"
-                                                        let batFile = DomainModel.config.ScribblePath.FileName 
-                                                        p.StartInfo.UseShellExecute <- false;
-                                                        p.StartInfo.RedirectStandardOutput <- true;
-                                                        p.StartInfo.FileName <- scribbleScript
-                                                        p.StartInfo.CreateNoWindow <- true
+                        let str = code.ToString()
+                        let replace0 = System.Text.RegularExpressions.Regex.Replace(str,"(\s{2,}|\t+)"," ") 
+                        let replace2 = System.Text.RegularExpressions.Regex.Replace(replace0,"\"","\\\"")
+                        let str = sprintf """{"code":"%s","proto":"%s","role":"%s"}""" replace2 protocol localRole
+                        FSharp.Data.Http.RequestString("http://localhost:8083/graph.json", 
+                            query = ["json",str] ,
+                            headers = [ FSharp.Data.HttpRequestHeaders.Accept HttpContentTypes.Json ],
+                            httpMethod = "GET" )
+                    |ScribbleSource.File -> 
+                        let parsedScribble = code.ToString()
+                        let str = sprintf """{"code":"%s","proto":"%s","role":"%s"}""" "code" protocol localRole
+                        match Parsing.getFSMJson parsedScribble str with 
+                            | Some parsed -> parsed
+                            | None -> failwith "The file given does not contain a valid fsm"
+                    |ScribbleSource.LocalExecutable ->  
+                        //redirect the output stream
+                        let batFile = DomainModel.config.ScribblePath.FileName 
+                        let tempFileName = Path.GetTempFileName()        
+                        
+                        try                                 
+                            // Configure command line
+                            let scribbleArgs = sprintf """/C %s %s -ass %s -ass-fsm %s -Z3 >> %s 2>&1 """ 
+                                                        batFile pathToFile protocol localRole tempFileName
 
-                                                        //let scribbleArgs = sprintf """/C %s %s -fsm %s %s""" batFile pathToFile protocol localRole
-                                                        let scribbleArgs = sprintf """/C %s %s -ass %s -ass-fsm %s""" batFile pathToFile protocol localRole
-                                                        p.StartInfo.Arguments <- scribbleArgs
-                                                        let parsedFile = new StringBuilder()
-                                                        p.OutputDataReceived.Add(
-                                                                fun (args) ->
-                                                                if ((args.Data <>"") && (args.Data <> System.Environment.NewLine)) then let x = parsedFile.Append(sprintf """%s%s""" args.Data System.Environment.NewLine) in () 
-                                                                )
-                                                        let res = p.Start()
-                                                        p.BeginOutputReadLine() 
-                                                        //read the output stream
-                                                        //let parsedScribble = p.StandardOutput.ReadToEnd();
-                                                        p.WaitForExit()
-                                                        // Fix teh parser not to care about starting/trailing spaces!
-                                                        let parsedScribble = parsedFile.ToString().Replace("\r\n\r\n", "\r\n")
-                                                        let str = sprintf """{"code":"%s","proto":"%s","role":"%s"}""" "code" protocol localRole
-                                                        match Parsing.getFSMJson parsedScribble str with 
-                                                            | Some parsed -> parsed
-                                                            | None -> failwith "The file given does not contain a valid fsm"
-                    
+                            // Incomment below for Scribble without assertions 
+                            //let scribbleArgs = sprintf """/C %s %s -fsm %s %s >> %s 2>&1 """ 
+                            //                               batFile pathToFile protocol localRole tempFileName
 
-        (* Enable this after you add WebAPI option
-        let str = code.ToString()
-        let replace0 = System.Text.RegularExpressions.Regex.Replace(str,"(\s{2,}|\t+)"," ") 
-        let replace2 = System.Text.RegularExpressions.Regex.Replace(replace0,"\"","\\\"")*)
-        (*let parsedScribble = code.ToString()
-        let str = 
-            sprintf """{"code":"%s","proto":"%s","role":"%s"}""" "code" protocol localRole*)
+                            let psi = ProcessStartInfo("cmd.exe", scribbleArgs)
+                            psi.UseShellExecute <- false; psi.CreateNoWindow <- true; 
+                                                            
+                            // Run the cmd process and wait for its completion
+                            let p = new Process()
+                            p.StartInfo<- psi;                             
+                            let res = p.Start(); 
+                            p.WaitForExit()
 
-        (*let fsm = FSharp.Data.Http.RequestString("http://localhost:8083/graph.json", 
-                                                    query = ["json",str] ,
-                                                    headers = [ FSharp.Data.HttpRequestHeaders.Accept HttpContentTypes.Json ],
-                                                    httpMethod = "GET" )*)
-        //let parsedScribble = File.ReadAllText("C:/Users/rn710/Repositories/scribble-java/MyLog.txt")
+                            // Read the result from the executed script
+                            let parsedFile = File.ReadAllText(tempFileName) 
+                            // TODO:  Fix the parser not to care about starting/trailing spaces!
+                            let parsedScribble = parsedFile.ToString().Replace("\r\n\r\n", "\r\n")
+                            let str = sprintf """{"code":"%s","proto":"%s","role":"%s"}""" "code" protocol localRole
 
-        (*let fsm = match Parsing.getFSMJson parsedScribble str with 
-                    | Some parsed -> parsed
-                    | None -> ""*)
+                            match Parsing.getFSMJson parsedScribble str with 
+                                | Some parsed -> parsed
+                                | None -> failwith (sprintf "The file given does not contain a valid fsm: %s" parsedScribble)
+                        finally 
+                            if File.Exists(tempFileName) then File.Delete(tempFileName)
 
         let size = parameters.Length
         generateTypes fsm name parameters.[3..(size-1)]
@@ -235,7 +224,8 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
                           ProvidedStaticParameter("Config",typeof<string>);
                           ProvidedStaticParameter("Delimiter",typeof<string>);
                           ProvidedStaticParameter("TypeAliasing",typeof<string>); 
-                          ProvidedStaticParameter("ScribbleSource",typeof<ScribbleSource>); ]
+                          ProvidedStaticParameter("ScribbleSource",typeof<ScribbleSource>);
+                          ProvidedStaticParameter("ExplicitConnection",typeof<bool>); ]
                          (* ProvidedStaticParameter("SerializeMessagePath",typeof<string*string>);
                           ProvidedStaticParameter("DeserializeMessagePath",typeof<string*string>);
                           ProvidedStaticParameter("DerializeChoicePath",typeof<string*string>)]*)
