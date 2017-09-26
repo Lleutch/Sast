@@ -6,7 +6,6 @@ open ProviderImplementation.ProvidedTypes // open the providedtypes.fs file
 open System.Reflection // necessary if we want to use the f# assembly
 open System.Threading.Tasks
 open System.Text
-open FSharp.Quotations.Evaluator
 
 // ScribbleProvider specific namespaces and modules
 open ScribbleGenerativeTypeProvider.DomainModel
