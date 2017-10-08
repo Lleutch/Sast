@@ -1,14 +1,20 @@
-﻿namespace ScribbleGenerativeTypeProvider
+﻿namespace Common
 
 /// This module contains common Types between different evolution of the CFSM definition
 /// which should never change.
 module CommonFSM =
 
-    type Role = Role of string
-    type Partner = Partner of string
-    type Label = Label of string
-    type Payload = Payload of string List
-    type Id = Id of int
+    type PName = PName of string
+    type PType = PType of string
+    
+    /// Role used to do projection. It is unique and equal to the user using this local Type.
+    type LocalRole  = LocalRole of string
+    type Partner    = Partner of string
+    type Label      = Label of string
+    type Payload    = Payload of PName * PType
+    type Payloads   = Payloads of Payload list
+    type StateId    = StateId of int
+    type Assertion = Assertion of string
 
 
 /// Communication Finite State Machine 
@@ -24,16 +30,19 @@ module BasicFSM =
     type EventType = 
         | Send
         | Receive
+        | Request
+        | Accept
                 
     type Event =
         {
-            Current     : Id
-            Role        : Role
+            Current     : StateId
+            LocalRole   : LocalRole
             Partner     : Partner
             Label       : Label
-            Payload     : Payload     
+            Payloads    : Payloads    
+            Assertion   : Assertion 
             EventType   : EventType
-            Next        : Id
+            Next        : StateId
         }
 
     type StateMachine = Events of Event list
@@ -56,6 +65,8 @@ module CFSM =
         | Receive of Transition
         | Branch of Transitions
         | Select of Transitions
+        | Request of Transition
+        | Accept of Transition
         | End
 
     and Transitions    = Transitions of Transition list
@@ -64,19 +75,21 @@ module CFSM =
     /// We can logically see this `Transition type` as a mapping `StartState -> EndState` and the arrow being some `Event` to apply to get therw
     and Transition = 
         {
-            Role : Role
-            Partner : Partner
-            Label : Label
-            Payload : Payload
-            NextState : Id
+            Partner     : Partner
+            Label       : Label
+            Payloads    : Payloads
+            Assertion   : Assertion 
+            NextState   : StateId
         }
-    type States = States of Map<Id,SessionType>
-    /// The State type now contain the action to perform which itself knows which transition(s) it is linked to.
+    type States = States of Map<StateId,SessionType>
+    /// The State type now contain the action to perform (Send,Receive,Branch,Select or End) which itself knows which transition(s) it is linked to.
     type CFSM = 
         {
-            FirstState : Id
-            States : States
+            LocalRole   : LocalRole
+            FirstState  : StateId
+            States      : States
         }
+
 
 
 /// This module provides Helper to translate a BasicFSM -> CFSM
@@ -89,22 +102,23 @@ module ConversionFSM =
     /// Represents all the possible Errors for the ConversionFSM module
     type ConversionFSMError =
     | NotIdenticalEventTypes
-    | DuplicationOfTransition of Id*Id
-    | MultipleTransition of Id*Id
-    | InputStateNotUnique of Id list
+    | DuplicationOfTransition of StateId*StateId
+    | MultipleTransition of StateId*StateId
+    | InputStateNotUnique of StateId list
     | ImpossibleEndStateNotYetDefined
     | CFSMWithoutAnyChannel
+    | DifferentLocalRole of LocalRole * LocalRole
         interface IFailure with
             member this.Reason =
                 match this with
                 | NotIdenticalEventTypes -> 
                     "{NotIdenticalEventTypes} ->\n" +
                     "A list of transactions associated to a state, contains at least an event of type SEND and an event of type RECEIVE which can't happen"
-                | DuplicationOfTransition (Id startId ,Id endId) ->
+                | DuplicationOfTransition (StateId startId ,StateId endId) ->
                     "{DuplicationOfTransition} ->\n" +
                     sprintf "Multiple Identical transition from state (%A) -> (%A) :" startId endId +
                     "Either Scribble returns multiple times the same channel, or there is an issue in the parsing of the scribble Output"
-                | MultipleTransition (Id startId ,Id endId) ->
+                | MultipleTransition (StateId startId ,StateId endId) ->
                     "{MultipleTransition} ->\n" +
                     sprintf "Multiple transition from state (%A) -> (%A) with different information : Issue in the Protocol Specification" startId endId
                 | InputStateNotUnique ids ->
@@ -116,7 +130,10 @@ module ConversionFSM =
                 | CFSMWithoutAnyChannel ->
                     "{CFSMWithoutAnyChannel} ->\n" +
                     "Got a CFSM with no transition whatsoever, meaning just 1 state and no communication with any participant!!"
-
+                | DifferentLocalRole (LocalRole expectedLocalRole, LocalRole receivedLocalRole) ->
+                    "{DifferentLocalRole} ->\n" +
+                    sprintf "Got multiple different local roles : Expected %A but received %A!!" expectedLocalRole receivedLocalRole
+    
                 |> sprintf "(ConversionFSMError) :: %s"
             member this.Kind = Kind.ConversionError
     
@@ -126,7 +143,7 @@ module ConversionFSM =
         let allStates = map |> Map.toList |> List.map fst
         let sessionTypeList = map |> Map.toList |> List.map snd
 
-        let rec aux (ids: Id list) (firstStates: Id list) =
+        let rec aux (ids: StateId list) (firstStates: StateId list) =
             match ids with
             | [] -> 
                 if firstStates.Length <> 1 then
@@ -134,11 +151,11 @@ module ConversionFSM =
                 else
                     firstStates.Head
             | hd::tl ->
-                let listOfSimilarNextState =
+                let listOfNextStateSimilarToHeadState =
                     [   
                         for sessionType in sessionTypeList do
                             match sessionType with
-                            | Send transition | Receive transition ->
+                            | Send transition | Receive transition | Request transition | Accept transition ->
                                 if transition.NextState = hd then
                                     yield transition.NextState
                             | Branch (Transitions transitions) | Select (Transitions transitions) ->
@@ -150,7 +167,7 @@ module ConversionFSM =
                                     ]
                             | End -> ()
                     ]            
-                if listOfSimilarNextState.IsEmpty then
+                if listOfNextStateSimilarToHeadState.IsEmpty then
                     aux tl (hd::firstStates)
                 else
                     aux tl firstStates
@@ -168,7 +185,7 @@ module ConversionFSM =
             [
                 for sessionType in values do
                     match sessionType with
-                    | Send transition | Receive transition -> yield transition
+                    | Send transition | Receive transition | Request transition | Accept transition -> yield transition
                     | Select (Transitions transitions) | Branch (Transitions transitions) -> yield! transitions
                     | End -> ()
             ]
@@ -187,8 +204,9 @@ module ConversionFSM =
                 tmpMap <- tmpMap.Add(endStateId,End)
             tmpMap
         {
-            FirstState = cfsm.FirstState
-            States = States mapWithEndStates
+            LocalRole   = cfsm.LocalRole
+            FirstState  = cfsm.FirstState
+            States      = States mapWithEndStates
         }
 
 
@@ -198,7 +216,7 @@ module ConversionFSM =
 
         let addingEventToExistingID 
             currentId transition oldTransitions 
-            (map:Map<Id,SessionType>) (session:Transitions -> SessionType)=
+            (map:Map<StateId,SessionType>) (session:Transitions -> SessionType)=
             let _ =
                 [
                     for oldTransition in oldTransitions do
@@ -212,21 +230,40 @@ module ConversionFSM =
                             
             map.Add(currentId, transition::oldTransitions |> Transitions |> session)
 
-        let rec aux (events:Event list) (accStates:States) =
+        let getLocalRole (listOfEvents : Event list) =
+            match listOfEvents with
+            | [] -> raiseFailure CFSMWithoutAnyChannel
+            | _ ->
+                let expectedLocalRole = listOfEvents.Head.LocalRole
+                let rec aux (eventList : Event list) =
+                    match eventList with
+                    | [] -> raiseFailure CFSMWithoutAnyChannel
+                    | [event] -> event.LocalRole
+                    | hd::tl ->
+                        if hd.LocalRole = expectedLocalRole then
+                            aux tl
+                        else
+                            raiseFailure (DifferentLocalRole (expectedLocalRole,hd.LocalRole))
+                aux listOfEvents 
+
+
+        let rec aux (events:Event list) (accStates:States) localRole =
             match events with
             | [] -> 
-                {   FirstState = getFirstState accStates
-                    States = accStates }
+                {   LocalRole   = localRole
+                    FirstState  = getFirstState accStates
+                    States      = accStates }
             | event::tl ->
                 let (States map) = accStates
                 let id = event.Current
                 let eventType = event.EventType
                 let transition =
-                    {   Role = event.Role
-                        Partner = event.Partner
-                        Label = event.Label
-                        Payload = event.Payload
-                        NextState = event.Next
+                    {   
+                        Assertion   = event.Assertion
+                        Partner     = event.Partner
+                        Label       = event.Label
+                        Payloads    = event.Payloads
+                        NextState   = event.Next
                     }
                 let newMap =
                     match map.TryFind id with
@@ -234,8 +271,10 @@ module ConversionFSM =
                     | None -> 
                         let sessionType = 
                             match eventType with
-                            | EventType.Send -> Send transition
+                            | EventType.Send    -> Send transition
                             | EventType.Receive -> Receive transition
+                            | EventType.Request -> Request transition
+                            | EventType.Accept  -> Accept transition
                         map.Add(id,sessionType)
                     // State already exists. 
                     // This means that normally we have either a branching strategy or a Select one. 
@@ -256,13 +295,15 @@ module ConversionFSM =
                         | End , _ -> raiseFailure ImpossibleEndStateNotYetDefined
                         | _ , _ -> raiseFailure NotIdenticalEventTypes
                                 
-                aux tl (States newMap)  
+                aux tl (States newMap) localRole
 
         // we check we have at list one transition. If we do not then it means we do not have any communication with any participants.
         if listOfEvents.Length >= 1 then
-            let cfsm = aux listOfEvents (States Map.empty<Id,SessionType>)
-            updateWithEndStatesIDs cfsm
+            let localRole = getLocalRole listOfEvents
+            let cfsm = aux listOfEvents (States Map.empty<StateId,SessionType>) localRole
+            updateWithEndStatesIDs cfsm 
         else
             raiseFailure CFSMWithoutAnyChannel
+
 
 

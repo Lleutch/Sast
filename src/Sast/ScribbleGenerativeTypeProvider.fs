@@ -18,6 +18,10 @@ open ScribbleGenerativeTypeProvider.AsstScribbleParser
 open System.Text.RegularExpressions
 open System.Text
 
+open Common
+open Common.CFSM
+open Common.CommonFSM
+
 
 type ScribbleSource = 
     | WebAPI = 0 
@@ -30,19 +34,68 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
 
     let tmpAsm = Assembly.LoadFrom(config.RuntimeAssembly)
 
-    let generateTypes (fsm:string) (name:string) (parameters:obj[]) = 
+    let generateTypes (fsm:CFSM) (name:string) (parameters:obj[]) = 
 
         let configFilePath = parameters.[0]  :?> string
         let delimitaters = parameters.[1]  :?> string
         let typeAliasing = parameters.[2] :?> string
         let explicitConnection = parameters.[4] :?> bool
         
+        // TODO : find a cleaner solution :
+        // we need to have the fsm completly prepared after being generated from the parsing part.
         let fsm = 
+            let replaceTransitions (transitions: Transition list) (aliases:DotNetTypesMapping.Root []) =
+                [ for transition in transitions do
+                    let (Payloads payloads) = transition.Payloads
+                    let updatedPayloads =
+                        [ for payload in payloads do
+                            let (Payload (pName,PType pType)) = payload
+                            let newPType = 
+                                // This mutation should be effective only once, because each element of aliases SHOULD normally be unique.
+                                // Nothing stopping duplication from hapenning. However we don't check that. 
+                                // TODO : Maybe we should.
+                                let mutable tmpPType = pType
+                                for alias in aliases do
+                                    tmpPType <- Regex.Replace(tmpPType,alias.Alias,alias.Type)
+                                tmpPType
+                            yield Payload (pName,PType newPType)
+                        ] |> Payloads
+                    yield { transition with Payloads = updatedPayloads }        
+                ]    
+
+
             let aliases = DotNetTypesMapping.Parse(typeAliasing)
-            let mutable prot = fsm
-            for alias in aliases do
-                 prot <- Regex.Replace(prot,alias.Alias,alias.Type)
-            prot
+            let (States states)= fsm.States 
+            let stateList = states |> Map.toList
+            [ for (id,sessionType) in stateList do
+                match sessionType with
+                | Send transition       -> 
+                    // We are sure that List.head won't throw an exception here.
+                    // we have the following invariant : replaceTransitions takes a list of size n
+                    // and returns a list of size n.
+                    let sessionType = replaceTransitions [transition] aliases |> List.head |> Send
+                    yield (id,sessionType)
+                | Receive transition -> 
+                    let sessionType = replaceTransitions [transition] aliases |> List.head |> Receive
+                    yield (id,sessionType)
+                | Branch (Transitions transitions) -> 
+                    let sessionType = replaceTransitions transitions aliases |> Transitions |> Branch
+                    yield (id,sessionType)
+                | Select (Transitions transitions) -> 
+                    let sessionType = replaceTransitions transitions aliases |> Transitions |> Select
+                    yield (id,sessionType)
+                | Request transition -> 
+                    let sessionType = replaceTransitions [transition] aliases |> List.head |> Request
+                    yield (id,sessionType)
+                | Accept transition -> 
+                    let sessionType = replaceTransitions [transition] aliases |> List.head |> Accept
+                    yield (id,sessionType)
+                | End -> yield (id,End)
+            ] 
+            |> Map.ofList 
+            |> States
+            |> fun (states:States) -> { fsm with States = states}
+
 
         let protocol = ScribbleProtocole.Parse(fsm)
         let triple= stateSet protocol
@@ -136,11 +189,14 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
 
         let relativePath = __SOURCE_DIRECTORY__ + file
 
-        let pathToFile = match File.Exists(file) with 
-                        | true -> file 
-                        | false -> match File.Exists(relativePath) with 
-                                    | true -> relativePath
-                                    | false -> failwith "The given file does not exist"
+        let pathToFile = 
+            match File.Exists(file) with 
+            | true -> file 
+            | false -> 
+                match File.Exists(relativePath) with 
+                | true -> relativePath
+                | false -> failwith "The given file does not exist"
+
         let code = File.ReadAllText(pathToFile)
 
         (*    match (File.Exists(file) , File.Exists(relativePath)) with
@@ -156,17 +212,19 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
                         let str = code.ToString()
                         let replace0 = System.Text.RegularExpressions.Regex.Replace(str,"(\s{2,}|\t+)"," ") 
                         let replace2 = System.Text.RegularExpressions.Regex.Replace(replace0,"\"","\\\"")
-                        let str = sprintf """{"code":"%s","proto":"%s","role":"%s"}""" replace2 protocol localRole
-                        FSharp.Data.Http.RequestString("http://localhost:8083/graph.json", 
-                            query = ["json",str] ,
-                            headers = [ FSharp.Data.HttpRequestHeaders.Accept HttpContentTypes.Json ],
-                            httpMethod = "GET" )
+                        let parsedScribble = sprintf """{"code":"%s","proto":"%s","role":"%s"}""" replace2 protocol localRole
+                        let str = 
+                            FSharp.Data.Http.RequestString("http://localhost:8083/graph.json", 
+                                query = ["json",str] ,
+                                headers = [ FSharp.Data.HttpRequestHeaders.Accept HttpContentTypes.Json ],
+                                httpMethod = "GET" )
+                        Parsing.getFSMJson parsedScribble str                      
+
                     |ScribbleSource.File -> 
                         let parsedScribble = code.ToString()
                         let str = sprintf """{"code":"%s","proto":"%s","role":"%s"}""" "code" protocol localRole
-                        match Parsing.getFSMJson parsedScribble str with 
-                            | Some parsed -> parsed
-                            | None -> failwith "The file given does not contain a valid fsm"
+                        Parsing.getFSMJson parsedScribble str
+
                     |ScribbleSource.LocalExecutable ->  
                         //redirect the output stream
                         let batFile = DomainModel.config.ScribblePath.FileName 
@@ -195,10 +253,8 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
                             // TODO:  Fix the parser not to care about starting/trailing spaces!
                             let parsedScribble = parsedFile.ToString().Replace("\r\n\r\n", "\r\n")
                             let str = sprintf """{"code":"%s","proto":"%s","role":"%s"}""" "code" protocol localRole
+                            Parsing.getFSMJson parsedScribble str
 
-                            match Parsing.getFSMJson parsedScribble str with 
-                                | Some parsed -> parsed
-                                | None -> failwith (sprintf "The file given does not contain a valid fsm: %s" parsedScribble)
                         finally 
                             if File.Exists(tempFileName) then File.Delete(tempFileName)
 

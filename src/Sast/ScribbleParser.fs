@@ -7,77 +7,14 @@ open FSharp.Data
 open System
 open System.Text.RegularExpressions
 open FParsec
-
-let printListJson (aList:string list) =
-    let length = aList.Length
-    List.fold
-        (fun (state,index) (elem:string) ->
-            (   if index < length then
-                    sprintf """%s"%s",""" state elem
-                else
-                    sprintf """%s"%s" """ state elem
-             ,index+1)
-        ) ("[",1) aList
-    |> fun (state,_) -> state + "]"
+open Common.BasicFSM
+open Common.CommonFSM
+open Common.ConversionFSM
 
 
-
-type Current = Current of int
-type Role = Role of string
-type Partner = Partner of string
-type Label = Label of string
-type Payload = Payload of string List
-type EventType = EventType of string
-type Next = Next of int
-
-type Transition =
-    {
-        Current     : Current
-        Role        : Role
-        Partner     : Partner
-        Label       : Label
-        Payload     : Payload     
-        EventType   : EventType
-        Next        : Next
-    }
-    member this.Stringify() =
-        let (Current current)       = this.Current
-        let (Role role)             = this.Role
-        let (Partner partner)       = this.Partner
-        let (Label label)           = this.Label
-        let (Payload payload)       = this.Payload     
-        let (EventType eventType)   = this.EventType
-        let (Next next)             = this.Next
-
-        sprintf
-            """{ "currentState": %i , "localRole":"%s" , "partner":"%s" , "label":"%s" , "payload": %s , "type":"%s" , "nextState":%i  } """        
-            current
-            role
-            partner
-            label
-            (if payload.Length = 1 && payload.[0] = "" then
-                printListJson []
-             else
-                printListJson payload
-            )
-            eventType
-            next         
-
-type StateMachine =
-    | Transitions of Transition list
-    member this.Stringify() =
-        let (Transitions transitionList) = this
-        let length = transitionList.Length
-        List.fold
-            (fun (state,index) (transition:Transition) ->
-                (if index < length then
-                    state + (transition.Stringify()) + ",\n"
-                 else
-                    state + (transition.Stringify())                    
-                , index + 1)
-            ) ("[",1) transitionList
-        |> fun (state,_) -> state + "]"
-
+/// TODO : Add Error Handling there
+/// This parser is not working. We need to remove it for the future.
+/// Kept for compilation purpose for the moment. 
 module parserHelper =
     let brackets = ('{','}')
     let squareBrackets = ('[',']')
@@ -97,14 +34,14 @@ module parserHelper =
         |> anyCharsTill
         // >>. skipNewline 
          
-    let current:Parser<_,unit> = 
+    let currentStateId :Parser<_,unit> = 
         spaces 
         >>. quoted quotes pint32 .>> spaces 
-        |>> Current
-    let next:Parser<_,unit> = 
+        |>> StateId
+    let nextStateId:Parser<_,unit> = 
         spaces 
         >>. quoted quotes pint32 .>> spaces 
-        |>> Next
+        |>> StateId
     
     let partnerEvent:Parser<_,unit> =
         str_ws "label"
@@ -114,9 +51,9 @@ module parserHelper =
         |>> fun (str,event) -> 
                 match event with
                 | '!' -> 
-                    Partner(str),EventType("send")
+                    Partner(str),EventType.Send
                 | '?' ->
-                    Partner(str),EventType("receive")                
+                    Partner(str),EventType.Receive
                 | _ ->
                     failwith "This case can never happen, if these two weren't here the flow would
                     have been broken earlier!!"
@@ -125,60 +62,67 @@ module parserHelper =
         spaces
         >>. (anyCharsTill (pchar '('))
         |>> Label
-    let payload:Parser<_,unit> =
-        let singlePayload =
-            spaces
-            >>. manyChars (noneOf [',';')'])
+
+    // TODO: Either re-implement or remove the whole file.
+    let payloads:Parser<_,unit> =
+//        let singlePayload =
+//            spaces
+//            >>. manyChars (noneOf [',';')'])
+//        spaces
+//        >>. between 
+//                spaces 
+//                (pstring ")\"" >>. spaces >>. pstring "];" >>. spaces) 
+//                (sepBy singlePayload (pstring ",")) 
+//        |>> Payloads        
         spaces
-        >>. between 
-                spaces 
-                (pstring ")\"" >>. spaces >>. pstring "];" >>. spaces) 
-                (sepBy singlePayload (pstring ",")) 
-        |>> Payload        
-   
-    let transition role currentState =
+        |>> (fun () -> Payloads [])
+
+
+    let event role currentState =
         parse{
             let! _ = pstring "->"
-            let! nextState = next
+            let! nextState = nextStateId
             let! _ = pstring "["
             let! partner,eventType = partnerEvent
             let! label = label
-            let! payload = payload
+            let! payloads = payloads
             return 
-                {
+                {   Assertion   = Assertion ""
                     Current     = currentState
-                    Role        = Role role
+                    LocalRole   = LocalRole role
                     Partner     = partner
                     Label       = label
-                    Payload     = payload     
+                    Payloads    = payloads     
                     EventType   = eventType
                     Next        = nextState
                 } |> Some
         }
-    let skipLabelInfoLine:Parser<Transition option,unit> =
+
+    let skipLabelInfoLine:Parser<Event option,unit> =
          parse{
             let! _ = pstring "[" .>> spaces
             let! _ = manyCharsTill anyChar (pstring "];")
             let! _ = spaces
             return None
         }
+
     let transitionOrSkipping role =
         parse{
             let! _ = spaces
-            let! currentState = current .>> spaces
-            return! transition role currentState <|> skipLabelInfoLine
+            let! currentState = currentStateId .>> spaces
+            return! event role currentState <|> skipLabelInfoLine
         }
-    let transitions role = 
+
+    let events role = 
         parse{
             let! _ = startUpUseless
             do! spaces
             let! list = (many (transitionOrSkipping role)) 
-            printfn "%A" list
             return 
                 list 
                 |> List.filter Option.isSome 
                 |> List.map Option.get
-                |> Transitions
+                |> Events
         }
 module Parsing = 
     open parserHelper
@@ -212,32 +156,16 @@ module Parsing =
         //let s0 = s.Result
         let s0 = response
         match Regex.IsMatch(s0,"java\\.lang\\.NullPointerException") with
-        |true ->  None
+        |true ->  
+            // TODO : Add correct Error
+            failwith "getArrayJson"
         |false ->
             let role = ScribbleAPI.Parse(json)
-            let test = run (transitions (role.Role) ) s0
-            match test with
-            | Failure (error,_,_) -> 
-                printfn "%s" error
-                None
-            | Success (res,_,_) ->
-                printfn "%s" (res.Stringify())
-                let res = ScribbleProtocole.Parse(res.Stringify())
-                let newRes = modifyAllChoice res
-                let finalRes =
-                    [ for tr in newRes do
-                        yield
-                            {
-                                Current     = tr.CurrentState |> Current
-                                Role        = tr.LocalRole |> Role
-                                Partner     = tr.Partner |> Partner
-                                Label       = tr.Label |> Label
-                                Payload     = tr.Payload |> List.ofArray |> Payload
-                                EventType   = tr.Type |> EventType
-                                Next        = tr.NextState |> Next
-                            }  
-                    ] |> Transitions
-                Some (finalRes.Stringify())
-                
+            let PFsm = run (events (role.Role) ) s0
+            match PFsm with
+            | Failure (error,_,_) -> failwith error
+            | Success (fsm,_,_) -> traverseStateMachine fsm
+
+
     let getFSMJson (json:string) = getArrayJson json
 

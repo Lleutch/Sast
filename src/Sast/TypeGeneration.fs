@@ -12,6 +12,8 @@ open ScribbleGenerativeTypeProvider.DomainModel
 open ScribbleGenerativeTypeProvider.CommunicationAgents
 open ScribbleGenerativeTypeProvider.IO
 open ScribbleGenerativeTypeProvider.RefinementTypes
+open Common.CFSM
+open Common.CommonFSM
 
 (******************* TYPE PROVIDER'S HELPERS *******************)
 
@@ -66,6 +68,147 @@ let internal addMembers (membersInfo:#MemberInfo list) (providedType:ProvidedTyp
 
 
 (******************* TYPE PROVIDER'S FUNCTIONS *******************)
+
+(*** ********************** ***)
+(***  Role Types Generation ***)
+(*** ********************** ***)
+/// Generates a Map between Partners -> Generated Provided Types
+let generatePartnersTypes (cfsm:CFSM) =
+    let uniquelyDefinedPartners = 
+        let (States states) = cfsm.States
+        states 
+        |> Map.toList |> List.map snd 
+        |> List.map 
+            (fun sessionType -> 
+                match sessionType with
+                | Send transition 
+                | Receive transition 
+                | Request transition 
+                | Accept transition -> [transition]
+
+                | Branch (Transitions transitions) 
+                | Select (Transitions transitions) -> transitions
+
+                | End -> []
+            )
+        |> List.concat
+        |> List.map (fun transition -> transition.Partner )
+        |> Set.ofList
+
+    [ for partner in uniquelyDefinedPartners do
+        let (Partner partnerName) = partner
+        let ctor = (<@@ () @@> |> createCstor [])
+        let providedPartner = 
+            let tmpProvidedPartner =
+                partnerName
+                |> createProvidedIncludedType 
+                |> addCstor ctor
+            tmpProvidedPartner
+            |> addProperty (Expr.NewObject(ctor,[]) |> createPropertyType "instance" tmpProvidedPartner)
+
+        providedPartner.HideObjectMethods <- true
+        yield (partner,providedPartner)
+    ] |> Map.ofList
+
+
+(*** ************************ ***)
+(***  Label Types Generation  ***)
+(*** ************************ ***)
+
+/// Generates a Map between Labels -> Generated Provided Types,
+/// When we are in the case of Choice.
+// TODO : Change choiceID to have a specific type
+let internal generateLabelTypes (stateID:StateId) (transitions:Transitions) (choiceID:int) =
+    // TODO : 1) put in a single place for efficiency (this uses reflection)
+    // TODO : 2) Remove that when going to erased TP
+    let assembly = typeof<TypeChoices.Choice1>.Assembly
+    let branchInterfaceType = assembly.GetType("ScribbleGenerativeTypeProvider.TypeChoices+Choice" + choiceID.ToString())
+
+    let (Transitions transitions) = transitions
+    
+    // TODO : Add method implementation
+    [ for transition in transitions do
+        let (Label labelName) = transition.Label
+        let providedLabel = 
+            let labelName = sprintf "Branch%i%s" choiceID labelName 
+            labelName
+            |> createProvidedIncludedType
+            |> addCstor (<@@ labelName @@> |> createCstor [])
+
+        providedLabel.SetAttributes(TypeAttributes.Public ||| TypeAttributes.Class)
+        providedLabel.HideObjectMethods <- true
+        providedLabel.AddInterfaceImplementation branchInterfaceType
+            
+        yield (stateID, providedLabel)    
+    ] 
+
+                        
+            
+            
+
+
+
+
+//    let currEvent = fsmInstance.[aChoice]
+//    let name = currEvent.Label.Replace("(","").Replace(")","") 
+//    printing "Add types + Ctor = " name
+//    let mutable t = name |> createProvidedIncludedType
+//                        |> addCstor (<@@ name @@> |> createCstor [])
+//
+//    if (alreadySeenOnlyLabel listeLabelSeen currEvent.Label) then
+//        t <- mapping.[currEvent.Label] //:?> ProvidedTypeDefinition
+//                                                                                        
+//    let listTypes = createProvidedParameters currEvent
+//    let listParam = List.append [ProvidedParameter("Role_State_" + currEvent.NextState.ToString(),mRole.[currEvent.Partner])] listTypes
+//    //let listPayload = (toList event.Payload)   
+//    let nextType = findProvidedType providedList (currEvent.NextState)
+//    let ctor = nextType.GetConstructors().[0]
+//    let exprState = Expr.NewObject(ctor, [])
+//    let myMethod = 
+//        ProvidedMethod("receive",listParam,nextType,
+//                        IsStaticMethod = false,
+//                        InvokeCode = 
+//                        fun args-> 
+//                            let buffers = args.Tail.Tail
+//                            (*let listPayload = (payloadsToList event.Payload)
+//                            let exprDes = deserializeChoice buffers listPayload
+//                            Expr.Sequential(exprDes,exprState)//*)                                             
+//
+//                            let listPayload = (payloadsToListStr event.Payload)
+//
+//                            let assertionString = event.Assertion
+//
+//                            let fooName,argsName = 
+//                                if ((assertionString <> "fun expression -> expression") && (assertionString <> ""))  then
+//                                    let index = RefinementTypes.dictFunInfos.Count                                                            
+//                                    let assertion = RefinementTypes.createFnRule index assertionString
+//                                    assertion |> fst |> RefinementTypes.addToDict
+//                                    snd assertion 
+//                                else 
+//                                    "",[]
+//
+//                            let exprDes = deserializeChoice buffers listPayload argsName fooName
+//                            Expr.Sequential(exprDes,exprState)
+//                        )
+//    let doc = getAssertionDoc event.Assertion
+//    if doc <> "" then  myMethod.AddXmlDoc(doc)                                                                                                                                        
+//                        
+//    t <- t |> addMethod (myMethod)
+//
+//    t.SetAttributes(TypeAttributes.Public ||| TypeAttributes.Class)
+//    t.HideObjectMethods <- true
+//    t.AddInterfaceImplementation typeCtor
+//                        
+//    if not (alreadySeenOnlyLabel listeLabelSeen currEvent.Label) then 
+//        mapping <- mapping.Add(currEvent.Label,t)
+//        listeType <- (t)::listeType       
+//    listeLabelSeen <- (currEvent.Label,currEvent.CurrentState)::listeLabelSeen    
+ 
+        
+
+
+
+
 
 let internal findCurrentIndex current (fsmInstance:ScribbleProtocole.Root []) = // gerer les cas
     let mutable inc = 0

@@ -1,4 +1,4 @@
-﻿namespace ScribbleGenerativeTypeProvider
+﻿namespace Common
 
 open FSharp.Quotations
 open FSharp.Quotations.Patterns
