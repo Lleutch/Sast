@@ -135,7 +135,7 @@ module ConversionFSM =
                     sprintf "Got multiple different local roles : Expected %A but received %A!!" expectedLocalRole receivedLocalRole
     
                 |> sprintf "(ConversionFSMError) :: %s"
-            member this.Kind = Kind.ConversionError
+            member __.Kind = Kind.ConversionError
     
     /// Allows to get the FirstState of the CFSM, and verifies that it is unique.
     let getFirstState (states:States) =

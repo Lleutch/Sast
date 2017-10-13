@@ -4,7 +4,6 @@
 open Microsoft.FSharp.Quotations
 open ProviderImplementation.ProvidedTypes // open the providedtypes.fs file
 open System.Reflection // necessary if we want to use the f# assembly
-open System.Threading.Tasks
 open System.Text
 
 // ScribbleProvider specific namespaces and modules
@@ -67,7 +66,9 @@ let internal addMembers (membersInfo:#MemberInfo list) (providedType:ProvidedTyp
     providedType
 
 
-(******************* TYPE PROVIDER'S FUNCTIONS *******************)
+(*** ********************************************************* ***)
+(******************* ProvidedTypes Generation  *******************)
+(*** ********************************************************* ***)
 
 (*** ********************** ***)
 (***  Role Types Generation ***)
@@ -107,19 +108,18 @@ let generatePartnersTypes (cfsm:CFSM) =
             |> addProperty (Expr.NewObject(ctor,[]) |> createPropertyType "instance" tmpProvidedPartner)
 
         providedPartner.HideObjectMethods <- true
-        yield (partner,providedPartner)
-    ] |> Map.ofList
+        yield (partner,ProvidedPartner providedPartner)
+    ] |> Map.ofList |> GeneratedPartners
 
 
 (*** ************************ ***)
 (***  Label Types Generation  ***)
 (*** ************************ ***)
-
 /// Generates a Map between Labels -> Generated Provided Types,
 /// When we are in the case of Choice.
 // TODO : Change choiceID to have a specific type
-let internal generateLabelTypes (stateID:StateId) (transitions:Transitions) (choiceID:int) =
-    // TODO : 1) put in a single place for efficiency (this uses reflection)
+let internal generateLabelTypes (transitions:Transitions) (choiceID:int) =
+    // TODO : 1) put in a single place for efficiency (this uses reflection) + error handle that
     // TODO : 2) Remove that when going to erased TP
     let assembly = typeof<TypeChoices.Choice1>.Assembly
     let branchInterfaceType = assembly.GetType("ScribbleGenerativeTypeProvider.TypeChoices+Choice" + choiceID.ToString())
@@ -127,83 +127,377 @@ let internal generateLabelTypes (stateID:StateId) (transitions:Transitions) (cho
     let (Transitions transitions) = transitions
     
     // TODO : Add method implementation
-    [ for transition in transitions do
-        let (Label labelName) = transition.Label
-        let providedLabel = 
-            let labelName = sprintf "Branch%i%s" choiceID labelName 
-            labelName
-            |> createProvidedIncludedType
-            |> addCstor (<@@ labelName @@> |> createCstor [])
+    let generatedLabels =
+        [ for transition in transitions do
+            let (Label labelName) = transition.Label
+            let providedLabel = 
+                let labelName = sprintf "Branch%i_%s" choiceID labelName 
+                labelName
+                |> createProvidedIncludedType
+                |> addCstor (<@@ labelName @@> |> createCstor [])
 
-        providedLabel.SetAttributes(TypeAttributes.Public ||| TypeAttributes.Class)
-        providedLabel.HideObjectMethods <- true
-        providedLabel.AddInterfaceImplementation branchInterfaceType
+            providedLabel.SetAttributes(TypeAttributes.Public ||| TypeAttributes.Class)
+            providedLabel.HideObjectMethods <- true
+            providedLabel.AddInterfaceImplementation branchInterfaceType
             
-        yield (stateID, providedLabel)    
-    ] 
+            yield (transition.Label,ProvidedLabel providedLabel)    
+        ] |> Map.ofList |> GeneratedLabels
+    (InterfaceType branchInterfaceType,generatedLabels)
 
-                        
+(*** ************************ ***)
+(***  State Types Generation  ***)
+(*** ************************ ***)
+/// Generates a Map between States -> Generated Provided Types
+// TODO : make ctor private in order not to have any States instanciable
+let generateStateTypes (cfsm:CFSM) =
+    let (States states) = cfsm.States
+    let stateTypes = 
+        let mutable choiceID = 1
+        [ for state in states do
+            let stateId = state.Key
+            let sessionType = state.Value
+            match sessionType with
+            | Branch transitions -> 
+                let branchName = sprintf "Branch%i" choiceID
+                let providedState = 
+                    let ctor = (<@@ () @@> |> createCstor [])
+                    let tmpProvidedState =
+                        branchName
+                        |> createProvidedIncludedType 
+                        |> addCstor ctor
+                    tmpProvidedState               
+                let interfaceType,generatedLabels = generateLabelTypes transitions choiceID
+                choiceID <- choiceID + 1
+                yield 
+                    (stateId ,
+                     {  interfaceType   = interfaceType
+                        branching       = providedState
+                        branches        = generatedLabels   
+                     } |> ChoiceType)
             
-            
+            | End -> 
+                let providedState = 
+                    let ctor = (<@@ new End() @@> |> createCstor [])
+                    let tmpProvidedState =
+                        let (StateId id) = stateId
+                        sprintf "Channel%i" id
+                        |> createProvidedIncludedType 
+                        |> addCstor ctor
+                    (stateId,EndType tmpProvidedState)               
+                yield providedState            
+            | _ ->
+                let providedState = 
+                    let ctor = (<@@ () @@> |> createCstor [])
+                    let tmpProvidedState =
+                        let (StateId id) = stateId
+                        sprintf "Channel%i" id
+                        |> createProvidedIncludedType 
+                        |> addCstor ctor
+                    (stateId,NotChoiceType tmpProvidedState)               
+                yield providedState
+
+        ] |> Map.ofList |> GeneratedStates
+    stateTypes
+
+(*** ********************************************************* ***)
+(*******************   ProvidedTypes Linking   *******************)
+(*** ********************************************************* ***)
+
+let getAssertionDoc (Assertion assertion) = 
+    if (assertion <> "") then 
+        let sb = new System.Text.StringBuilder()
+        sb.Append("<summary> Method arguments should satisfy the following constraint:") |> ignore
+        sb.Append ("<para>" + assertion.Replace(">", "&gt;").Replace("<","&gt;") + "</para>" ) |>ignore
+        sb.Append("</summary>") |>ignore
+        sb.ToString()
+    else ""   
+
+
+let internal getAllChoiceLabelString (indexList : int list) (fsmInstance:ScribbleProtocole.Root []) =
+    let rec aux list acc =
+        match list with
+            |[] -> acc
+            |hd::tl -> let labelBytes = fsmInstance.[hd].Label 
+                       aux tl (labelBytes::acc) 
+    in aux indexList []
+
+let getDocForChoice indexList fsmInstance=  
+    let sb = new System.Text.StringBuilder()
+    sb.Append("<summary> When branching here, you will have to type pattern match on the following types :") |> ignore
+    
+    (indexList |> getAllChoiceLabelString <| fsmInstance)
+    |> List.iter(fun message -> sb.Append ("<para> - " + message + "</para>" ) |> ignore ) 
+    |> ignore
+
+    sb.Append("</summary>") |> ignore
+    sb.ToString()
+
+
+// TODO : Find a way to generically handle with Payload Types
+// Either via a specific DSL for defining the Types + Assertions
+let internal generateProvidedParameters (transition : Transition) (ProvidedPartner providedPartner) =
+    let genericBuffer = typeof<Buf<_>>.GetGenericTypeDefinition() 
+    let (Partner partner) = transition.Partner
+    let (Payloads payloads) = transition.Payloads
+
+    let providedParameters =
+        [ for (Payload (PName pName,PType pType)) in payloads do
+            let genType = genericBuffer.MakeGenericType(System.Type.GetType(pType))
+            yield ProvidedParameter(pName,genType) 
+        ]
+    ProvidedParameter(partner,providedPartner)::providedParameters
 
 
 
+let internal provideMethodLinkingNoBranch (methodLinking : MethodLinkingNoBranch<'a>) = 
+    
+    let (GeneratedStates generatedStates)       = methodLinking.generatedStates
+    let (GeneratedPartners generatedPartners)   = methodLinking.generatedPartners
+    let stateID             = methodLinking.stateID
+    let transition          = methodLinking.transition
+    let invokeCode          = methodLinking.invokeCode
+    let invokeCodeParameter = methodLinking.invokeCodeParameter
+    let providedState       = generatedStates.Item stateID
 
-//    let currEvent = fsmInstance.[aChoice]
-//    let name = currEvent.Label.Replace("(","").Replace(")","") 
-//    printing "Add types + Ctor = " name
-//    let mutable t = name |> createProvidedIncludedType
-//                        |> addCstor (<@@ name @@> |> createCstor [])
-//
-//    if (alreadySeenOnlyLabel listeLabelSeen currEvent.Label) then
-//        t <- mapping.[currEvent.Label] //:?> ProvidedTypeDefinition
-//                                                                                        
-//    let listTypes = createProvidedParameters currEvent
-//    let listParam = List.append [ProvidedParameter("Role_State_" + currEvent.NextState.ToString(),mRole.[currEvent.Partner])] listTypes
-//    //let listPayload = (toList event.Payload)   
-//    let nextType = findProvidedType providedList (currEvent.NextState)
-//    let ctor = nextType.GetConstructors().[0]
-//    let exprState = Expr.NewObject(ctor, [])
-//    let myMethod = 
-//        ProvidedMethod("receive",listParam,nextType,
-//                        IsStaticMethod = false,
-//                        InvokeCode = 
-//                        fun args-> 
-//                            let buffers = args.Tail.Tail
-//                            (*let listPayload = (payloadsToList event.Payload)
-//                            let exprDes = deserializeChoice buffers listPayload
-//                            Expr.Sequential(exprDes,exprState)//*)                                             
-//
-//                            let listPayload = (payloadsToListStr event.Payload)
-//
-//                            let assertionString = event.Assertion
-//
-//                            let fooName,argsName = 
-//                                if ((assertionString <> "fun expression -> expression") && (assertionString <> ""))  then
-//                                    let index = RefinementTypes.dictFunInfos.Count                                                            
-//                                    let assertion = RefinementTypes.createFnRule index assertionString
-//                                    assertion |> fst |> RefinementTypes.addToDict
-//                                    snd assertion 
-//                                else 
-//                                    "",[]
-//
-//                            let exprDes = deserializeChoice buffers listPayload argsName fooName
-//                            Expr.Sequential(exprDes,exprState)
-//                        )
-//    let doc = getAssertionDoc event.Assertion
-//    if doc <> "" then  myMethod.AddXmlDoc(doc)                                                                                                                                        
-//                        
-//    t <- t |> addMethod (myMethod)
-//
-//    t.SetAttributes(TypeAttributes.Public ||| TypeAttributes.Class)
-//    t.HideObjectMethods <- true
-//    t.AddInterfaceImplementation typeCtor
-//                        
-//    if not (alreadySeenOnlyLabel listeLabelSeen currEvent.Label) then 
-//        mapping <- mapping.Add(currEvent.Label,t)
-//        listeType <- (t)::listeType       
-//    listeLabelSeen <- (currEvent.Label,currEvent.CurrentState)::listeLabelSeen    
- 
+    let nextProvidedType = 
+        let nextStateID = transition.NextState
+        generatedStates.Item nextStateID
+
+    match providedState with
+    | EndType _
+    | ChoiceType _ -> failwith ""
+    | NotChoiceType providedStateType -> 
+        let myMethod = 
+            let methodName = 
+                let (Label label) = transition.Label
+                methodLinking.methodName + label
+
+            let parameters =
+                let providedPartner = generatedPartners.Item transition.Partner
+                generateProvidedParameters transition providedPartner
+
+            let nextProvidedType =
+                match nextProvidedType with
+                | ChoiceType choice -> choice.branching
+                | NotChoiceType providedStateType -> providedStateType
+                | EndType endType -> endType
+
+            ProvidedMethod(
+                methodName,parameters,nextProvidedType,IsStaticMethod = false,
+                InvokeCode = invokeCode invokeCodeParameter
+            )                    
+
+        let doc = getAssertionDoc transition.Assertion
+        if doc <> "" then  myMethod.AddXmlDoc(doc)                                                                                                                                        
+                    
+        let providedStateType = 
+            providedStateType 
+            |> addMethod (myMethod)
+            |> NotChoiceType
+                    
+        (stateID,providedStateType)
+
+
+let internal provideMethodLinkingBranch (methodLinking : MethodLinkingBranch<'a>) = 
+    
+    let (GeneratedStates generatedStates)       = methodLinking.generatedStates
+    let (GeneratedPartners generatedPartners)   = methodLinking.generatedPartners
+    let stateID             = methodLinking.stateID
+    let (Transitions transitions) = methodLinking.transitions
+    let invokeCode          = methodLinking.invokeCode
+    let invokeCodeParameter = methodLinking.invokeCodeParameter
+    let providedState       = generatedStates.Item stateID
+
+
+
+    match providedState with
+    | EndType _
+    | NotChoiceType _ -> failwith ""
+    | ChoiceType choice ->
+        let providedBranching = choice.branching
+        let (GeneratedLabels nextLabelTypes) = choice.branches 
+        let (InterfaceType interfaceType) = choice.interfaceType 
+
+        let myMethod = 
+            let methodName  = "Branch"
+            let parameters  = []
+
+            ProvidedMethod(
+                methodName,parameters,interfaceType,IsStaticMethod = false,
+                InvokeCode = invokeCode invokeCodeParameter
+            )                    
+
+        let doc = failwith "Not Implemented Yet!!"
+            // getDocForChoice [] fsmInstance
+        myMethod.AddXmlDoc(doc)
+                    
+        let branching = 
+            providedBranching
+            |> addMethod (myMethod)  
+
+        let branches =
+            [ for transition in transitions do
+                let (ProvidedLabel currentLabelProvidedType) = nextLabelTypes.Item transition.Label
+
+                let myMethod = 
+                    let methodName      = "receive"
+                    let parameters      = 
+                        let providedPartner = generatedPartners.Item transition.Partner
+                        generateProvidedParameters transition providedPartner
+
+                    // TODO : Check the nextState from the cfsm if it is a choice or not.
+                    let nextProvidedType = 
+                        let nextStateID = transition.NextState
+                        match generatedStates.Item nextStateID with
+                        | ChoiceType choice              -> choice.branching
+                        | NotChoiceType nextProvidedType -> nextProvidedType
+                        | EndType endType                -> endType
+
+                    ProvidedMethod(
+                        methodName,parameters,nextProvidedType,IsStaticMethod = false,
+                        InvokeCode = invokeCode invokeCodeParameter
+                    )                    
+
+                let doc = failwith "Not Implemented Yet!!"
+                    // getDocForChoice [] fsmInstance
+                myMethod.AddXmlDoc(doc)
+                    
+                let currentLabelProvidedType = 
+                    currentLabelProvidedType 
+                    |> addMethod (myMethod)
+                    |> ProvidedLabel
+                yield (transition.Label,currentLabelProvidedType)
+            ] |> Map.ofList |> GeneratedLabels
+        
+        let choice =
+            { interfaceType = InterfaceType interfaceType
+              branching     = branching
+              branches      = branches
+            } |> ChoiceType
+
+        (stateID,choice)
+
+let internal provideMethodLinkingEndType (methodLinking : MethodLinkingEnd<'a>) = 
+    
+    let (GeneratedStates generatedStates)       = methodLinking.generatedStates
+    let stateID             = methodLinking.stateID
+    let providedState       = generatedStates.Item stateID
+
+    match providedState with
+    | ChoiceType _     
+    | NotChoiceType _   -> failwith ""
+    | EndType providedEndType ->
+        let myMethod = 
+            let methodName  = "Close"
+            let parameters  = []
+
+            ProvidedMethod(
+                methodName,parameters,typeof<End>,IsStaticMethod = false,
+                InvokeCode = fun _ -> <@@ failwith "Not Implemented Yet!" @@>
+            )                    
+                    
+        let providedEndType = 
+            providedEndType
+            |> addMethod (myMethod)  
+            |> EndType
+                    
+        (stateID,providedEndType)
+
+
+let internal generateMethodsBetweenEachStates (cfsm : CFSM) (GeneratedStates generatedStates) =
+    let (States states) = cfsm.States
+    let generatedPartners = generatePartnersTypes cfsm
+
+    // Updating Generated Provided States by adding methods to them
+    // It is done by generating a new GeneratedStates value, no mutation.
+    let updatedGeneratedStatesWithMethods =
+        [ for state in states do
+            let stateID = state.Key
+            let sessionType = state.Value      
+
+            match sessionType with
+            | Send transition   ->
+                let methodLinking =
+                    {   transition          = transition
+                        generatedStates     = GeneratedStates generatedStates
+                        stateID             = stateID
+                        generatedPartners   = generatedPartners
+                        invokeCode          = fun () _ -> <@@ failwith "Not Implemented Yet!" @@>
+                        invokeCodeParameter = ()
+                        methodName          = "Send"
+                    }                    
+                yield provideMethodLinkingNoBranch methodLinking
+
+            | Receive transition ->
+                let methodLinking =
+                    {   transition          = transition
+                        generatedStates     = GeneratedStates generatedStates
+                        stateID             = stateID
+                        generatedPartners   = generatedPartners
+                        invokeCode          = fun () _ -> <@@ failwith "Not Implemented Yet!" @@>
+                        invokeCodeParameter = ()
+                        methodName          = "Receive"
+                    }                    
+                yield provideMethodLinkingNoBranch methodLinking
+                
+            | Request transition ->
+                let methodLinking =
+                    {   transition          = transition
+                        generatedStates     = GeneratedStates generatedStates
+                        stateID             = stateID
+                        generatedPartners   = generatedPartners
+                        invokeCode          = fun () _ -> <@@ failwith "Not Implemented Yet!" @@>
+                        invokeCodeParameter = ()
+                        methodName          = "Request"
+                    }                    
+                yield provideMethodLinkingNoBranch methodLinking
+
+            | Accept transition -> 
+                let methodLinking =
+                    {   transition          = transition
+                        generatedStates     = GeneratedStates generatedStates
+                        stateID             = stateID
+                        generatedPartners   = generatedPartners
+                        invokeCode          = fun () _ -> <@@ failwith "Not Implemented Yet!" @@>
+                        invokeCodeParameter = ()
+                        methodName          = "Accept"
+                    }                    
+                yield provideMethodLinkingNoBranch methodLinking
+
+            | Select (Transitions transitions) ->
+                yield!
+                    [ for transition in transitions do
+                        let methodLinking =
+                            {   transition          = transition
+                                generatedStates     = GeneratedStates generatedStates
+                                stateID             = stateID
+                                generatedPartners   = generatedPartners
+                                invokeCode          = fun () _ -> <@@ failwith "Not Implemented Yet!" @@>
+                                invokeCodeParameter = ()
+                                methodName          = "Send"
+                            }                        
+                        yield provideMethodLinkingNoBranch methodLinking                    
+                    ]
+
+            | Branch transitions -> 
+                let methodLinking =
+                    {   transitions         = transitions 
+                        generatedStates     = GeneratedStates generatedStates
+                        stateID             = stateID
+                        generatedPartners   = generatedPartners
+                        invokeCode          = fun () _ -> <@@ failwith "Not Implemented Yet!" @@>
+                        invokeCodeParameter = ()
+                    }
+
+                yield provideMethodLinkingBranch methodLinking
+            | End ->
+                let methodLinking =
+                    {   generatedStates     = GeneratedStates generatedStates
+                        stateID             = stateID }
+                yield provideMethodLinkingEndType methodLinking
+        ] |> Map.ofList |> GeneratedStates
+    updatedGeneratedStatesWithMethods
+
         
 
 
@@ -211,8 +505,6 @@ let internal generateLabelTypes (stateID:StateId) (transitions:Transitions) (cho
 
 
 let internal findCurrentIndex current (fsmInstance:ScribbleProtocole.Root []) = // gerer les cas
-    let mutable inc = 0
-    let mutable index = -1 
     let fsm = Array.toList fsmInstance
     let rec aux (acc:ScribbleProtocole.Root list) count =
         match acc with
@@ -223,22 +515,6 @@ let internal findCurrentIndex current (fsmInstance:ScribbleProtocole.Root []) = 
                           aux tl (count+1) 
     aux fsm 0
 
-let internal findNext index (fsmInstance:ScribbleProtocole.Root []) =
-    (fsmInstance.[index].NextState)
-
-let internal findNextIndex currentState (fsmInstance:ScribbleProtocole.Root []) =
-    let index = findCurrentIndex currentState fsmInstance in
-    let next = findNext index fsmInstance in
-    findCurrentIndex next fsmInstance
-
-let internal findSameNext nextState  (fsmInstance:ScribbleProtocole.Root [])  =
-    let mutable list = []
-    let mutable inc = 0
-    for event in fsmInstance do
-        if event.NextState = nextState then
-            list <- inc::list
-        inc <- inc+1
-    list
 
 let rec alreadySeenLabel (liste:(string*int) list) (elem:string*int) =
     match liste with
@@ -251,7 +527,7 @@ let rec alreadySeenLabel (liste:(string*int) list) (elem:string*int) =
 let rec alreadySeenOnlyLabel (liste:(string*int) list) (elem:string) =
     match liste with
         | [] -> false
-        | (hdS,hdI)::tl ->  if hdS.Equals(elem) then
+        | (hdS,_)::tl ->  if hdS.Equals(elem) then
                                 true
                             else
                                 alreadySeenOnlyLabel tl elem
@@ -360,7 +636,7 @@ let internal makeRoleTypes (fsmInstance:ScribbleProtocole.Root []) =
     (mapping,listeType)
 
 
-let getAssertionDoc assertion = 
+let getAssertionDocObsolete assertion = 
     if (assertion <> "") then 
         let sb = new System.Text.StringBuilder()
         sb.Append("<summary> Method arguments should satisfy the following constraint:") |> ignore
@@ -429,7 +705,7 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
                                                 let exprDes = deserializeChoice buffers listPayload argsName fooName
                                                 Expr.Sequential(exprDes,exprState)
                                           )
-                        let doc = getAssertionDoc event.Assertion
+                        let doc = getAssertionDocObsolete event.Assertion
                         if doc <> "" then  myMethod.AddXmlDoc(doc)                                                                                                                                        
                         
                         t <- t |> addMethod (myMethod)
@@ -485,7 +761,7 @@ let internal makeLabelTypes (fsmInstance:ScribbleProtocole.Root []) (providedLis
                                                     let exprDes = deserializeChoice buffers listPayload argsName fooName
                                                     Expr.Sequential(exprDes,exprState)
                                           )
-                        let doc = getAssertionDoc event.Assertion
+                        let doc = getAssertionDocObsolete event.Assertion
                         if doc <> "" then myMethod.AddXmlDoc(doc)     
 
                         t <- t |> addMethod (myMethod)
@@ -766,14 +1042,6 @@ let internal getAllChoiceLabels (indexList : int list) (fsmInstance:ScribbleProt
                     aux tl ((labelBytes,typing)::acc) 
         in aux indexList []
 
-let internal getAllChoiceLabelString (indexList : int list) (fsmInstance:ScribbleProtocole.Root []) =
-    let rec aux list acc =
-        match list with
-            |[] -> acc
-            |hd::tl -> let labelBytes = fsmInstance.[hd].Label 
-                       aux tl (labelBytes::acc) 
-    in aux indexList []
-
 let invokeCodeOnSend (args:Expr list) (payload: ScribbleProtocole.Payload [])  (payloadDelim: string List) 
                     (labelDelim : string List)  (endDelim: string List)  (nameLabel:string) exprState role fullName (event:ScribbleProtocole.Root) = 
     let buffers = args.Tail.Tail         
@@ -819,7 +1087,6 @@ let invokeCodeOnSend (args:Expr list) (payload: ScribbleProtocole.Payload [])  (
 
 
 let invokeCodeOnRequest role exprState= 
-    let hello = "hello"
     let exprNext = 
         <@@ printing "in request" role  @@>
     let exprState = 
@@ -829,7 +1096,6 @@ let invokeCodeOnRequest role exprState=
     Expr.Sequential(exprNext,exprState)
 
 let invokeCodeOnAccept role exprState= 
-    let hello = "hello"
     let exprNext = 
         <@@ printing "in accept" role  @@>
     let exprState = 
@@ -838,9 +1104,9 @@ let invokeCodeOnAccept role exprState=
         <@@ Regarder.acceptConnection "agent" role @@>
     Expr.Sequential(exprNext,exprState)
 
-let invokeCodeOnReceive (args:Expr list) (payload: ScribbleProtocole.Payload [])  (payloadDelim: string List) 
-                       (labelDelim : string List)  (endDelim: string List)  (nameLabel:string) (message: byte[]) 
-                        exprState role fullName assertionString = 
+let invokeCodeOnReceive (args:Expr list) (payload: ScribbleProtocole.Payload [])  
+                        (nameLabel:string) (message: byte[]) 
+                        exprState role assertionString = 
    
     let buffers = args.Tail.Tail
     let listPayload = (payloadsToList payload)
@@ -889,12 +1155,11 @@ let invokeCodeOnChoice (payload: ScribbleProtocole.Payload []) indexList fsmInst
         let labelRead = decode.GetString(result.[0]) 
         let assembly = System.Reflection.Assembly.GetExecutingAssembly() 
         let label = Regarder.getLabelType labelRead 
-        let ctor = label.GetConstructors().[0] 
         let typing = assembly.GetType(label.FullName) 
         System.Activator.CreateInstance(typing,[||]) 
     @@>
 
-let getDocForChoice indexList fsmInstance=  
+let getDocForChoiceObsolete indexList fsmInstance=  
     let sb = new System.Text.StringBuilder()
     sb.Append("<summary> When branching here, you will have to type pattern match on the following types :") |> ignore
     
@@ -915,8 +1180,6 @@ let generateMethod aType (methodName:string) listParam nextType (errorMessage:st
     match methodName with
         |"send" -> 
             let labelDelim, payloadDelim, endDelim = getDelims fullName
-            let decode = new System.Text.UTF8Encoding()
-            let message = Array.append (decode.GetBytes(fullName)) (decode.GetBytes(labelDelim.Head))
             
             let myMethod = 
                 ProvidedMethod(methodName+nameLabel, listParam, nextType,
@@ -927,14 +1190,14 @@ let generateMethod aType (methodName:string) listParam nextType (errorMessage:st
                                 labelDelim endDelim nameLabel 
                                 exprState role fullName event)
                         
-            let doc = getAssertionDoc event.Assertion
+            let doc = getAssertionDocObsolete event.Assertion
             if doc <> "" then myMethod.AddXmlDoc(doc)
                         
             aType 
                 |> addMethod myMethod
                 |> ignore
         |"receive" ->  
-            let labelDelim, payloadDelim, endDelim = getDelims fullName
+            let labelDelim, _, _= getDelims fullName
             let decode = new System.Text.UTF8Encoding()
             let message = Array.append (decode.GetBytes(fullName)) (decode.GetBytes(labelDelim.Head))
 
@@ -943,9 +1206,8 @@ let generateMethod aType (methodName:string) listParam nextType (errorMessage:st
                     IsStaticMethod = false,
                     InvokeCode = 
                         fun args-> 
-                            invokeCodeOnReceive args event.Payload payloadDelim 
-                                labelDelim endDelim nameLabel message 
-                                exprState role fullName event.Assertion)
+                            invokeCodeOnReceive args event.Payload nameLabel message 
+                                exprState role event.Assertion)
                                    
             let myMethodAsync = 
                 ProvidedMethod((methodName+nameLabel+"Async"),listParam,nextType,
@@ -968,7 +1230,7 @@ let generateMethod aType (methodName:string) listParam nextType (errorMessage:st
                             let exprDes = deserializeAsync buffers listPayload [message] role argsName fooName
                             Expr.Sequential(exprDes,exprState))
                             
-            let doc = getAssertionDoc event.Assertion
+            let doc = getAssertionDocObsolete event.Assertion
             if doc <> "" then myMethod.AddXmlDoc(doc); myMethodAsync.AddXmlDoc(doc)
                         
             aType 
@@ -980,7 +1242,7 @@ let generateMethod aType (methodName:string) listParam nextType (errorMessage:st
                 ProvidedMethod(methodName+nameLabel, listParam, nextType,
                     IsStaticMethod = false,
                     InvokeCode = 
-                        fun args-> 
+                        fun _-> 
                             invokeCodeOnRequest role exprState) 
             aType 
                 |> addMethod myMethod
@@ -991,7 +1253,7 @@ let generateMethod aType (methodName:string) listParam nextType (errorMessage:st
                 ProvidedMethod(methodName+nameLabel, listParam, nextType,
                     IsStaticMethod = false,
                     InvokeCode = 
-                        fun args-> 
+                        fun _-> 
                             invokeCodeOnAccept role exprState) 
             aType 
                 |> addMethod myMethod
@@ -1008,7 +1270,7 @@ let generateChoice (aType:ProvidedTypeDefinition) (fsmInstance: ScribbleProtocol
     let myMethod = 
         ProvidedMethod( "branch", [],labelType, IsStaticMethod = false, 
             InvokeCode = 
-                (fun args  ->  
+                (fun _  ->  
                     invokeCodeOnChoice event.Payload indexList fsmInstance role))                                                                                         
     let doc = getDocForChoice indexList fsmInstance
     myMethod.AddXmlDoc(doc)
@@ -1020,7 +1282,6 @@ let generateMethodParams (fsmInstance:ScribbleProtocole.Root []) idx (providedLi
     let event = fsmInstance.[idx]
     let c = nextType.GetConstructors().[0]
     let exprState = Expr.NewObject(c, [])
-    let role = event.Partner
                 
     let listTypes = 
         match methodName with
@@ -1070,7 +1331,6 @@ let rec addProperties (providedListStatic:ProvidedTypeDefinition list) (provided
     let currentState = stateList.Head
     let indexOfState = findCurrentIndex currentState fsmInstance
     let indexList = findSameCurrent currentState fsmInstance 
-    let mutable choiceIter = 1
     let mutable methodName = "finish"
     if indexOfState <> -1 then
         methodName <- fsmInstance.[indexOfState].Type
@@ -1100,7 +1360,6 @@ let internal contains (aSet:Set<'a>) x =
 let internal stateSet (fsmInstance:ScribbleProtocole.Root []) =
     let firstState = fsmInstance.[0].CurrentState
     let mutable setSeen = Set.empty
-    let mutable counter = 0
     for event in fsmInstance do
         if (not(contains setSeen event.CurrentState) || not(contains setSeen event.NextState)) then
             setSeen <- setSeen.Add(event.CurrentState)

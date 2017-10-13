@@ -2,6 +2,13 @@
 
 open System.Threading
 open FSharp.Configuration
+open Common
+open Common.CommonFSM
+open ProviderImplementation.ProvidedTypes
+open Common.CFSM
+open Microsoft.FSharp.Quotations
+open System
+
 
 // Scribble Type 
 type ScribbleProtocole = FSharp.Data.JsonProvider<""" [ { "currentState":0 , "localRole":"StringLocalRole" , "partner":"StringPartner" , "label":"StringLabel" ,"payload":[{"varName":"someZ", "varType":"someType"}] ,"assertion":"expression", "type":"EventType" , "nextState":0  } ] """>
@@ -80,5 +87,60 @@ type IFailure =
 
 
 let createFailure (failure:#IFailure) = failwith failure.Description
+
+
+
+
+
+type ProvidedPartner   = ProvidedPartner of ProvidedTypeDefinition
+type GeneratedPartners  = GeneratedPartners of Map<Partner,ProvidedPartner>
+
+type ProvidedLabel     = ProvidedLabel of ProvidedTypeDefinition
+type GeneratedLabels   = GeneratedLabels of Map<Label,ProvidedLabel>
+type InterfaceType     = InterfaceType of Type 
+
+type Choice =
+    {   interfaceType   : InterfaceType
+        branching       : ProvidedTypeDefinition
+        branches        : GeneratedLabels   }
+
+type StateTypes =
+    | ChoiceType of Choice
+    | NotChoiceType of ProvidedTypeDefinition
+    | EndType of ProvidedTypeDefinition
+
+type GeneratedStates    = GeneratedStates of Map<StateId,StateTypes>
+
+type ChannelID = 
+    | ChannelState of StateId
+    | ChannelLabel of Label
+
+type MethodLinkingNoBranch<'a> =
+    {
+        transition          : Transition 
+        generatedStates     : GeneratedStates
+        stateID             : StateId
+        generatedPartners   : GeneratedPartners
+        invokeCode          : 'a -> (Expr list -> Expr)
+        invokeCodeParameter : 'a
+        methodName          : string
+    }
+
+
+type MethodLinkingBranch<'a> =
+    {
+        transitions         : Transitions 
+        generatedStates     : GeneratedStates
+        stateID             : StateId
+        generatedPartners   : GeneratedPartners
+        invokeCode          : 'a -> (Expr list -> Expr)
+        invokeCodeParameter : 'a
+    }
+
+type MethodLinkingEnd<'a> =
+    {
+        generatedStates     : GeneratedStates
+        stateID             : StateId
+    }
 
 
