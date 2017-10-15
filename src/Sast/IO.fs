@@ -1,15 +1,9 @@
 ﻿module ScribbleGenerativeTypeProvider.IO
 
-open ProviderImplementation.ProvidedTypes // open the providedtypes.fs file
-open System.Net.Sockets
-open System.IO
 open System.Text
 open System
 open Microsoft.FSharp.Quotations
 open ScribbleGenerativeTypeProvider.DomainModel
-open ScribbleGenerativeTypeProvider.Regarder
-open ScribbleGenerativeTypeProvider.CommunicationAgents
-open System.Threading.Tasks
 
 
 /// this way of defining failures can be used in an exception raising manner
@@ -24,6 +18,13 @@ type IOFailures =
             | Encoding (encode,exn)                     -> sprintf "IOFailures[Encoding] : Impossible to encode( %s ) \-> exception( %s )" encode (exn.Message)
             | SerializationPayload (arg,typing)         -> sprintf "IOFailures[SerializationPayload] : Cannot serialize payloads( %A ) to type( %A )" arg typing
             | DeserializationConvertion (arg,typing)    -> sprintf "IOFailures[DeserializationConvertion] : Cannot deserialze payloads( %A ) to type( %A )" arg typing
+
+
+// To be used for buffers
+let setResults results (bufs:ISetResult []) = 
+    Seq.zip results (Array.toSeq bufs) 
+    |> Seq.iter 
+        ( fun (res,buf:ISetResult) -> buf.SetValue(res) )
 
 
 // Helpers to write and read bytes with the help of delims
@@ -164,7 +165,7 @@ let convert (arrayList:byte[] list) (elemTypelist:string list) =
                 let invoke = mymethod.Invoke(null,[|box hd;box 0|])
                 aux tl (elemList.Tail) (invoke::acc)
             with
-            | e -> 
+            | _ -> 
                 DeserializationConvertion (hd,typing) |> createFailure  
                         
     aux arrayList elemTypelist []
@@ -196,7 +197,7 @@ let deserialize (args: Expr list) (listTypes:string list) (messages: _ list) (ro
         | Some true ->
 
             let received = List.toSeq received
-            Runtime.setResults received (%%(Expr.NewArray(typeof<ISetResult>, buffer)):ISetResult []) 
+            setResults received (%%(Expr.NewArray(typeof<ISetResult>, buffer)):ISetResult []) 
     @>
                  
 
@@ -225,7 +226,7 @@ let deserializeAsync (args: Expr list)  (listTypes:string list) (messages: _ lis
                     | Some true ->
 
                         let received = received |> List.toSeq          
-                        Runtime.setResults received (%%(Expr.NewArray(typeof<ISetResult>, buffer)):ISetResult []) 
+                        setResults received (%%(Expr.NewArray(typeof<ISetResult>, buffer)):ISetResult []) 
                 return res
             }
         Async.Start(work)
@@ -258,5 +259,5 @@ let deserializeChoice (args: Expr list) (listTypes:string list) argsNames foo =
             let test = (%%(Expr.NewArray(typeof<ISetResult>, buffer)):ISetResult []) 
             let completed = test |> Array.map(fun t -> t.GetTask())
             printing "Receive a choice" (received,test,completed)
-            Runtime.setResults received (%%(Expr.NewArray(typeof<ISetResult>, buffer)):ISetResult []) 
+            setResults received (%%(Expr.NewArray(typeof<ISetResult>, buffer)):ISetResult []) 
     @>

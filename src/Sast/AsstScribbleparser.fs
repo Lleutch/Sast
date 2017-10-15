@@ -1,11 +1,7 @@
 ﻿module ScribbleGenerativeTypeProvider.AsstScribbleParser
 
-open FSharp.Data
-open System
 open System.Text.RegularExpressions
 open FParsec
-open AssertionParsing
-open AssertionParsing.FuncGenerator
 open Common
 open Common.CommonFSM
 open Common.BasicFSM
@@ -87,8 +83,8 @@ module parserHelper =
         //let typePayload = spaces >>. manyChars (noneOf [',';')'])
         //let singlePayload = pipe3 varPayload (pstring ":") (spaces >>. varPayload) (fun id _ str ->  (id, str))
         let varName = manyChars (noneOf [',';')'; ':']) 
-        let unitType = ((pstring "_" >>. varName ) <|> (pstring "Unit")) |>> (fun x -> "")
-        let dummyVars = (pstring "_" >>. varName ) //|>> (fun x -> "")
+        let unitType = ((pstring "_" >>. varName ) <|> (pstring "Unit")) |>> (fun _ -> "")
+        let _ = (pstring "_" >>. varName ) //|>> (fun x -> "")
         let singlePayload = 
              attempt
                 (pipe4 (spaces >>.  varName) (pstring ":") spaces (unitType <|> varName)
@@ -115,7 +111,7 @@ module parserHelper =
     //(pstring ")\"" >>. spaces >>. pstring "];" >>. spaces)    
     let assertion:Parser<_,unit> =
         let endOfPayload = pstring "\"" >>. spaces >>. pstring "];" >>. spaces
-        ((endOfPayload |>> fun x -> "") <|> ((pstring "@" >>. (between (pstring "\\\"")  (pstring "\\\"") expr))  .>> endOfPayload)) 
+        ((endOfPayload |>> fun _ -> "") <|> ((pstring "@" >>. (between (pstring "\\\"")  (pstring "\\\"") expr))  .>> endOfPayload)) 
         |>> Assertion
 
     let event role currentState =
@@ -180,7 +176,7 @@ module Parsing =
             let role = ScribbleAPI.Parse(json)
             let Pfsm = run (events (role.Role) ) s0
             match Pfsm with
-            | Failure (error,_,_) -> failwith "The file given does not contain a valid fsm"
+            | Failure (_,_,_) -> failwith "The file given does not contain a valid fsm"
             | Success (fsm,_,_) -> traverseStateMachine fsm
                 
     let getFSMJson (json:string) = getArrayJson json

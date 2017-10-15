@@ -40,10 +40,6 @@ type VarCache() =
 
 let createCache = new VarCache()
 
-let printing message data =
-    let doPrinting = true
-    if doPrinting then
-        printfn "%s %A" message data
 
 exception TooManyTriesError of string
 

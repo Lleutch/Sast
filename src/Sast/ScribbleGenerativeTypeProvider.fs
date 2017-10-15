@@ -19,6 +19,7 @@ open System.Text.RegularExpressions
 open System.Text
 
 open Common
+open Common.BasicFSM
 open Common.CFSM
 open Common.CommonFSM
 
@@ -37,10 +38,19 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
     let generateTypes (fsm:CFSM) (name:string) (parameters:obj[]) = 
 
         let configFilePath = parameters.[0]  :?> string
-        let delimitaters = parameters.[1]  :?> string
+        //let delimitaters = parameters.[1]  :?> string
         let typeAliasing = parameters.[2] :?> string
         let explicitConnection = parameters.[4] :?> bool
+
+        let naming = __SOURCE_DIRECTORY__ + configFilePath
+        configurationFile.Load(naming)
         
+        let delimiters = 
+            {   labelDelimiter      = configurationFile.Delimiters.EndDelimiter
+                payloadDelimiter    = configurationFile.Delimiters.PayloadDelimiter
+                endDelimiter        = configurationFile.Delimiters.EndDelimiter
+            }
+
         // TODO : find a cleaner solution :
         // we need to have the fsm completly prepared after being generated from the parsing part.
         let fsm = 
@@ -95,66 +105,88 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
             |> Map.ofList 
             |> States
             |> fun (states:States) -> { fsm with States = states}
-
-
-        let protocol = ScribbleProtocole.Parse(fsm)
-        let triple= stateSet protocol
-        let n,stateSet,firstState = triple
-        let listTypes = (Set.toList stateSet) |> List.map (fun x -> makeStateType x )
-        let firstStateType = findProvidedType listTypes firstState
-        let tupleRole = makeRoleTypes protocol
-        let tupleLabel = makeLabelTypes protocol listTypes (tupleRole |> fst)
-        let listOfRoles = makeRoleList protocol
-        let list1 = snd(tupleLabel)
-        let list2 = snd(tupleRole)
-
-        (*let local = parameters.[0]  :?> bool
-        let partnersInfos = parameters.[1]  :?> Map<string,string*int>
-        let localRoleInfos = parameters.[2]  :?> string*int *)
-
         
-        let mutable mapping = Map.empty<string,string list* string list * string list>
-
-        let instance = MappingDelimiters.Parse(delimitaters)
-        for elem in instance do
-            let label = elem.Label
-            let delims = elem.Delims
-            let delim1 = delims.Delim1 |> Array.toList
-            let delim2 = delims.Delim2 |> Array.toList
-            let delim3 = delims.Delim3 |> Array.toList
-            mapping <- mapping.Add(label,(delim1,delim2,delim3)) 
-
-        (*let serializePath = parameters.[1]  :?> string*string
-        let deserializePath = parameters.[2]  :?> string*string
-        let deserializeChoicePath = parameters.[3]  :?> string*string*)
-
-        mapping |> DomainModel.modifyMap 
-
-        let naming = __SOURCE_DIRECTORY__ + configFilePath
-        DomainModel.config.Load(naming)
 
 
-        (tupleLabel |> fst) |> Regarder.addLabel
-        let agentRouter = createRouter (DomainModel.config)  listOfRoles explicitConnection
+        let providedTypes,firstProvidedType = 
+            let (GeneratedStates generatedStates,GeneratedPartners generatedPartners) = 
+                fsm
+                |> generateStateTypes 
+                |> generateMethodsBetweenEachStates fsm delimiters
+            let providedStates =
+                generatedStates
+                |> Map.toList
+                |> List.map snd
+                |> List.map (
+                    function
+                    | EndType providedType       -> [providedType]
+                    | NotChoiceType providedType -> [providedType]
+                    | ChoiceType choice  ->
+                        let providedBranch = choice.branching
+                        let providedLabels =
+                            let (GeneratedLabels generatedLabels) = choice.branches
+                            [ for generatedLabel in generatedLabels do
+                                let (ProvidedLabel providedLabel) = generatedLabel.Value 
+                                yield providedLabel
+                            ] 
+                        providedBranch::providedLabels
+                   )
+                |> List.concat
+            let firstProvidedType =
+                let firstStateID = fsm.FirstState
+                match generatedStates.Item firstStateID with
+                | EndType providedType       -> providedType
+                | NotChoiceType providedType -> providedType
+                | ChoiceType choice  -> choice.branching
+
+
+            providedStates,firstProvidedType
+
+        let listOfRoles =
+            let (States states) = fsm.States
+            let (LocalRole localRole) = fsm.LocalRole
+            states
+            |> Map.toList
+            |> List.map snd
+            |> List.map (
+                function
+                | Accept transition 
+                | Request transition 
+                | Receive transition 
+                | Send transition -> 
+                    let (Partner partner) = transition.Partner
+                    [partner]
+
+                | Branch (Transitions transitions) 
+                | Select (Transitions transitions) -> 
+                    [ for transition in transitions do
+                        let (Partner partner) = transition.Partner
+                        yield partner
+                    ]
+                
+                | End -> []
+               )
+            |> List.concat  |> List.append [localRole]
+            |> Set.ofList   |> Set.toList
+
+        let agentRouter = createRouter (DomainModel.configurationFile) listOfRoles explicitConnection
         Regarder.addAgent "agent" agentRouter 
         let cache = createCache
         Regarder.initCache "cache" cache
 
-        addProperties listTypes listTypes (Set.toList stateSet) (fst tupleLabel) (fst tupleRole) protocol
 
-        let ctor = firstStateType.GetConstructors().[0]                                                               
-        let ctorExpr = Expr.NewObject(ctor, [])
-        let exprCtor = ctorExpr
-        let exprStart = <@@ Regarder.startAgentRouter "agent"  @@>
-        let expression = Expr.Sequential(exprStart,exprCtor)
+                                                                       
+        let expression = 
+            let ctor = firstProvidedType.GetConstructors().[0]            
+            let exprCtor = Expr.NewObject(ctor, [])
+            let exprStart = <@@ Regarder.startAgentRouter "agent"  @@>
+            Expr.Sequential(exprStart,exprCtor)
             
         let ty = name 
                     |> createProvidedType tmpAsm
-                    |> addCstor ( <@@ "hey" + string n @@> |> createCstor [])
-                    |> addMethod ( expression |> createMethodType "Start" [] firstStateType)
-                    |> addIncludedTypeToProvidedType list2
-                    |> addIncludedTypeToProvidedType list1
-                    |> addIncludedTypeToProvidedType listTypes
+                    |> addCstor ( <@@ "hey" @@> |> createCstor [])
+                    |> addMethod ( expression |> createMethodType "Start" [] firstProvidedType)
+                    |> addIncludedTypeToProvidedType providedTypes
                     //|> addProvidedTypeToAssembly
         
         let assemblyPath = Path.ChangeExtension(System.IO.Path.GetTempFileName(), ".dll")
@@ -169,11 +201,6 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
         assembly.AddTypes [ty]
         ty
 
-    let createTypeWithFSM (name:string) (parameters:obj[]) =
-        let fsm = parameters.[0]  :?> string  (* this is used if we want to assure that the type of the parameter
-        we are grabbing is a string : DOWNCASTING . Which also means type verification at runtime and not compile time *)
-        let size = parameters.Length
-        generateTypes fsm name parameters.[1..(size-1)]
 
     let createTypeWithFile (name:string) (parameters:obj[]) =
         
@@ -183,7 +210,7 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
         let configFilePath = parameters.[3] :?> string
 
         let naming = __SOURCE_DIRECTORY__ + configFilePath
-        DomainModel.config.Load(naming)
+        DomainModel.configurationFile.Load(naming)
 
         let scribbleSource = parameters.[6] :?> ScribbleSource
 
@@ -227,7 +254,7 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
 
                     |ScribbleSource.LocalExecutable ->  
                         //redirect the output stream
-                        let batFile = DomainModel.config.ScribblePath.FileName 
+                        let batFile = DomainModel.configurationFile.ScribblePath.FileName 
                         let tempFileName = Path.GetTempFileName()        
                         
                         try                                 
@@ -266,13 +293,6 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
     let providedTypeFSM = TypeGeneration.createProvidedType tmpAsm "TypeProviderFSM"
     let providedTypeFile = TypeGeneration.createProvidedType tmpAsm "TypeProviderFile"
     
-    let parametersFSM = [ProvidedStaticParameter("Protocol",typeof<string>);
-                         ProvidedStaticParameter("Config",typeof<string>);
-                         ProvidedStaticParameter("Delimiter",typeof<string>);
-                         ProvidedStaticParameter("TypeAliasing",typeof<string>)]
-                        (* ProvidedStaticParameter("SerializeMessagePath",typeof<string*string>);
-                         ProvidedStaticParameter("DeserializeMessagePath",typeof<string*string>);
-                         ProvidedStaticParameter("DerializeChoicePath",typeof<string*string>)]*)
     
     let parametersFile=  [ProvidedStaticParameter("File Uri",typeof<string>);
                           ProvidedStaticParameter("Global Protocol",typeof<string>);
@@ -287,7 +307,6 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
                           ProvidedStaticParameter("DerializeChoicePath",typeof<string*string>)]*)
 
     do 
-        providedTypeFSM.DefineStaticParameters(parametersFSM,createTypeWithFSM)
         providedTypeFile.DefineStaticParameters(parametersFile,createTypeWithFile)
         
         this.AddNamespace(ns, [providedTypeFSM])

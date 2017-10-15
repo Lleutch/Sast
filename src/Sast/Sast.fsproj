@@ -85,13 +85,13 @@
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="DomainModel.fs" />
     <Compile Include="TypeChoices.fs" />
-    <Compile Include="Runtime.fs" />
     <Compile Include="CommunicationAgents.fs" />
     <Compile Include="Regarder.fs" />
     <Compile Include="RefinementTypes.fs" />
     <Compile Include="IO.fs" />
-    <Compile Include="AsstScribbleParser.fs" />
+    <Compile Include="Runtime.fs" />
     <Compile Include="TypeGeneration.fs" />
+    <Compile Include="AsstScribbleParser.fs" />
     <Compile Include="ScribbleParser.fs" />
     <Compile Include="ScribbleGenerativeTypeProvider.fs" />
     <None Include="paket.references" />
@@ -107,7 +107,7 @@
     <Reference Include="System.Xml.Linq" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\Common\SastDomainModel.fsproj">
+    <ProjectReference Include="..\..\SastDomainModel\SastDomainModel.fsproj">
       <Name>SastDomainModel</Name>
       <Project>{f8213918-3f8d-4878-a69a-987dab69bab3}</Project>
       <Private>True</Private>

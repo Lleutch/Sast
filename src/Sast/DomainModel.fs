@@ -10,9 +10,6 @@ open Microsoft.FSharp.Quotations
 open System
 
 
-// Scribble Type 
-type ScribbleProtocole = FSharp.Data.JsonProvider<""" [ { "currentState":0 , "localRole":"StringLocalRole" , "partner":"StringPartner" , "label":"StringLabel" ,"payload":[{"varName":"someZ", "varType":"someType"}] ,"assertion":"expression", "type":"EventType" , "nextState":0  } ] """>
-
 type ScribbleAPI = FSharp.Data.JsonProvider<""" { "code":"Code", "proto":"global protocol", "role":"local role" } """>
 
 type MappingDelimiters = FSharp.Data.JsonProvider<""" [ {"label" : "string", "delims": {"delim1": ["delim1"] , "delim2": ["delim2"] , "delim3": ["delim3"] } } ] """>
@@ -61,7 +58,8 @@ let getDelims label =
 
 // Configuration File YAML TP
 [<Literal>]
-let metaYaml = "Partners:
+let metaYaml = "
+Partners:
     - Name: You
       IP: 127.0.0.1
       Port: 5001
@@ -73,10 +71,37 @@ LocalRole:
 
 ScribblePath:
    FileName: scribbleScriptfile   
+
+Delimiters:
+    LabelDelimiter      : delimiter
+    EndDelimiter        : delimiter
+    PayloadDelimiter    : delimiter
+
 "
 
-type ConfigFile = YamlConfig<YamlText=metaYaml>
-let config = ConfigFile()
+[<Literal>]
+let metaConfig = "
+Partners:
+    - Name: You
+      IP: 127.0.0.1
+      Port: 5001
+
+LocalRole:
+  Name: Me
+  IP: 127.0.0.1
+  Port: 5000 
+
+ScribblePath:
+   FileName: scribbleScriptfile   
+
+Delimiters:
+    LabelDelimiter      : delimiter
+    EndDelimiter        : delimiter
+    PayloadDelimiter    : delimiter
+
+"
+type ConfigurationFile  = YamlConfig<YamlText = metaConfig, InferTypesFromStrings=true>
+let configurationFile   = ConfigurationFile()
 
 
 // Result Monad + End type 
@@ -89,9 +114,29 @@ type IFailure =
 let createFailure (failure:#IFailure) = failwith failure.Description
 
 
+let printing message data =
+    let doPrinting = true
+    if doPrinting then
+        printfn "%s %A" message data
 
 
+(*** ***************************************************************************************************** ***)
+(***                              Wrapper types for ProvidedTypes Runtime                                  ***)
+(*** there are also wrapper for method binding between all the providedTypes in the ProvidedTypes universe ***)
+(*** ***************************************************************************************************** ***)
+// TODO : Probably change the approach for serialization + deserialization
+type Delimiters =
+    {
+        labelDelimiter      : string
+        payloadDelimiter    : string
+        endDelimiter        : string
+    }
 
+(*** ***************************************************************************************************** ***)
+(***                                    ProvidedTypes Compile-time                                         ***)
+(***          Wrapper types for going CFSM -> ProvidedTypes universe : For States + Labels + Roles         ***)
+(*** there are also wrapper for method binding between all the providedTypes in the ProvidedTypes universe ***)
+(*** ***************************************************************************************************** ***)
 type ProvidedPartner   = ProvidedPartner of ProvidedTypeDefinition
 type GeneratedPartners  = GeneratedPartners of Map<Partner,ProvidedPartner>
 
@@ -115,26 +160,24 @@ type ChannelID =
     | ChannelState of StateId
     | ChannelLabel of Label
 
-type MethodLinkingNoBranch<'a> =
+type MethodLinkingNoBranch =
     {
         transition          : Transition 
         generatedStates     : GeneratedStates
         stateID             : StateId
         generatedPartners   : GeneratedPartners
-        invokeCode          : 'a -> (Expr list -> Expr)
-        invokeCodeParameter : 'a
+        invokeCode          : Expr -> (Expr list -> Expr)
         methodName          : string
     }
 
 
-type MethodLinkingBranch<'a> =
+type MethodLinkingBranch =
     {
         transitions         : Transitions 
         generatedStates     : GeneratedStates
         stateID             : StateId
         generatedPartners   : GeneratedPartners
-        invokeCode          : 'a -> (Expr list -> Expr)
-        invokeCodeParameter : 'a
+        invokeCode          : (Expr list -> Expr)
     }
 
 type MethodLinkingEnd<'a> =
