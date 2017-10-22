@@ -119,7 +119,7 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
                 |> List.map snd
                 |> List.map (
                     function
-                    | EndType providedType       -> [providedType]
+                    | EndType providedType      
                     | NotChoiceType providedType -> [providedType]
                     | ChoiceType choice  ->
                         let providedBranch = choice.branching
@@ -135,7 +135,7 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
             let firstProvidedType =
                 let firstStateID = fsm.FirstState
                 match generatedStates.Item firstStateID with
-                | EndType providedType       -> providedType
+                | EndType providedType       
                 | NotChoiceType providedType -> providedType
                 | ChoiceType choice  -> choice.branching
 
@@ -185,7 +185,7 @@ type GenerativeTypeProvider(config : TypeProviderConfig) as this =
         let ty = name 
                     |> createProvidedType tmpAsm
                     |> addCstor ( <@@ "hey" @@> |> createCstor [])
-                    |> addMethod ( expression |> createMethodType "Start" [] firstProvidedType)
+                    |> addMethod ( expression |> createMethodType "Init" [] firstProvidedType)
                     |> addIncludedTypeToProvidedType providedTypes
                     //|> addProvidedTypeToAssembly
         

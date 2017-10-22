@@ -58,28 +58,6 @@ let getDelims label =
 
 // Configuration File YAML TP
 [<Literal>]
-let metaYaml = "
-Partners:
-    - Name: You
-      IP: 127.0.0.1
-      Port: 5001
-
-LocalRole:
-  Name: Me
-  IP: 127.0.0.1
-  Port: 5000 
-
-ScribblePath:
-   FileName: scribbleScriptfile   
-
-Delimiters:
-    LabelDelimiter      : delimiter
-    EndDelimiter        : delimiter
-    PayloadDelimiter    : delimiter
-
-"
-
-[<Literal>]
 let metaConfig = "
 Partners:
     - Name: You
@@ -90,9 +68,6 @@ LocalRole:
   Name: Me
   IP: 127.0.0.1
   Port: 5000 
-
-ScribblePath:
-   FileName: scribbleScriptfile   
 
 Delimiters:
     LabelDelimiter      : delimiter

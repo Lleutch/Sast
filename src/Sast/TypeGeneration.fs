@@ -122,7 +122,6 @@ module TypeGeneration =
             assembly.GetType("ScribbleGenerativeTypeProvider.TypeChoices+Choice" + choiceID.ToString())
         let (Transitions transitions) = transitions
         
-        // TODO : Add method implementation
         let generatedLabels = 
             [ for transition in transitions do
                   let (Label labelName) = transition.Label
@@ -132,6 +131,7 @@ module TypeGeneration =
                       labelName
                       |> createProvidedIncludedType
                       |> addCstor (<@@ labelName @@> |> createCstor [])
+
                   providedLabel.SetAttributes(TypeAttributes.Public ||| TypeAttributes.Class)
                   providedLabel.HideObjectMethods <- true
                   providedLabel.AddInterfaceImplementation branchInterfaceType
@@ -177,7 +177,7 @@ module TypeGeneration =
                         let ctor = (<@@ new End() @@> |> createCstor [])
                         let tmpProvidedState =
                             let (StateId id) = stateId
-                            sprintf "Channel%i" id
+                            sprintf "State%i" id
                             |> createProvidedIncludedType 
                             |> addCstor ctor
                         (stateId,EndType tmpProvidedState)               
@@ -187,7 +187,7 @@ module TypeGeneration =
                         let ctor = (<@@ () @@> |> createCstor [])
                         let tmpProvidedState =
                             let (StateId id) = stateId
-                            sprintf "Channel%i" id
+                            sprintf "State%i" id
                             |> createProvidedIncludedType 
                             |> addCstor ctor
                         (stateId,NotChoiceType tmpProvidedState)               
@@ -347,7 +347,6 @@ module TypeGeneration =
                             let providedPartner = generatedPartners.Item transition.Partner
                             generateProvidedParameters transition providedPartner
 
-                        // TODO : Check the nextState from the cfsm if it is a choice or not.
                         let nextProvidedType = 
                             let nextStateID = transition.NextState
                             match generatedStates.Item nextStateID with
@@ -398,6 +397,7 @@ module TypeGeneration =
                 let methodName  = "Close"
                 let parameters  = []
 
+                // TODO : Close all the connections
                 ProvidedMethod(
                     methodName,parameters,typeof<End>,IsStaticMethod = false,
                     InvokeCode = fun _ -> <@@ new End() @@>
@@ -424,24 +424,26 @@ module TypeGeneration =
 
                 match sessionType with
                 | Send transition   ->
+                    let (Label label) = transition.Label
                     let methodLinking =
                         {   transition          = transition
                             generatedStates     = GeneratedStates generatedStates
                             stateID             = stateID
                             generatedPartners   = generatedPartners
                             invokeCode          = RuntimeInvokeCode.invokeCodeOnSend delimiters transition
-                            methodName          = "Send"
+                            methodName          = "Send" + label
                         }                    
                     yield provideMethodLinkingNoBranch methodLinking
 
                 | Receive transition ->
+                    let (Label label) = transition.Label
                     let methodLinking =
                         {   transition          = transition
                             generatedStates     = GeneratedStates generatedStates
                             stateID             = stateID
                             generatedPartners   = generatedPartners
                             invokeCode          = RuntimeInvokeCode.invokeCodeOnReceive delimiters transition
-                            methodName          = "Receive"
+                            methodName          = "Receive" + label
                         }                    
                     yield provideMethodLinkingNoBranch methodLinking
                 
@@ -470,13 +472,14 @@ module TypeGeneration =
                 | Select (Transitions transitions) ->
                     yield!
                         [ for transition in transitions do
+                            let (Label label) = transition.Label
                             let methodLinking =
                                 {   transition          = transition
                                     generatedStates     = GeneratedStates generatedStates
                                     stateID             = stateID
                                     generatedPartners   = generatedPartners
                                     invokeCode          = RuntimeInvokeCode.invokeCodeOnSend delimiters transition
-                                    methodName          = "Send"
+                                    methodName          = "Send" + label
                                 }                        
                             yield provideMethodLinkingNoBranch methodLinking                    
                         ]

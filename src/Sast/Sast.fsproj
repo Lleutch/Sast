@@ -89,7 +89,7 @@
     <Compile Include="Regarder.fs" />
     <Compile Include="RefinementTypes.fs" />
     <Compile Include="IO.fs" />
-    <Compile Include="Runtime.fs" />
+    <Compile Include="RuntimeInvokeCode.fs" />
     <Compile Include="TypeGeneration.fs" />
     <Compile Include="AsstScribbleParser.fs" />
     <Compile Include="ScribbleParser.fs" />
